@@ -5,7 +5,7 @@ import okhttp3.Request
 
 fun checkNewVersion(): LatestVersionInfo {
     if (!isNetworkAvailable(app)) return LatestVersionInfo()
-    val url = "https://api.github.com/repos/BingYinBest/avbtoolkit/releases/latest"
+    val url = "https://api.github.com/repos/BingYinBest/avbtool/releases/latest"
     // default null value if failed
     val defaultValue = LatestVersionInfo()
     runCatching {

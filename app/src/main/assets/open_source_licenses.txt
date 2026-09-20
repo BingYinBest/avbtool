@@ -29,7 +29,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 MA 02110-1301 USA.
 
 The source code for this component is available at:
-https://github.com/BingYinBest/avbtoolkit
+https://github.com/BingYinBest/avbtool
 under app/src/main/cpp/fec_rs/ (port of the AOSP external/fec RS codec,
 itself derived from the original libfec by Phil Karn, KA9Q).
 ============================================================
