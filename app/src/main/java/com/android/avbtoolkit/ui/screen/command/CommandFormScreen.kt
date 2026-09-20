@@ -3,14 +3,13 @@ package com.android.avbtoolkit.ui.screen.command
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
@@ -18,18 +17,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.android.avbtoolkit.AvbArg
 import com.android.avbtoolkit.AvbArgType
 import com.android.avbtoolkit.AvbCommand
@@ -40,20 +39,23 @@ import com.android.avbtoolkit.ui.component.liquid.LiquidGlassTopBar
 import com.android.avbtoolkit.ui.component.liquid.liquidGlassLayer
 import com.android.avbtoolkit.ui.component.liquid.rememberLiquidGlass
 import com.android.avbtoolkit.ui.component.miuix.EditText
+import com.kyant.backdrop.backdrops.LayerBackdrop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
- * Form screen for a single avbtool command: renders every declared
- * argument as an editable row (SAF file picker for FILE, text field for
- * TEXT/UINT/FLAGS, switch for BOOL, dropdown for choice lists), builds
- * the argv and runs the bundled avbtool via [AvbExecutor].
+ * Miuix-style form for a single avbtool command. Arguments are grouped
+ * into preference cards like the Settings screen: file pickers, text
+ * fields, dropdowns and switches. Builds argv and runs via [AvbExecutor].
  */
 @Composable
 fun CommandScreen(
@@ -63,15 +65,8 @@ fun CommandScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // Keep fds open until the run completes.
     val fdToPathCache = remember(command.id) { mutableMapOf<String, Int>() }
 
-    fun releaseFds() {
-        fdToPathCache.values.forEach { AvbExecutor.releaseFd(it) }
-        fdToPathCache.clear()
-    }
-
-    // argument key -> current value (files stored as content uri string)
     var values by remember(command.id) {
         mutableStateOf(command.args.associate { it.key to "" })
     }
@@ -79,7 +74,6 @@ fun CommandScreen(
     var stdout by remember { mutableStateOf("") }
     var stderr by remember { mutableStateOf("") }
     var exitCode by remember { mutableStateOf<Int?>(null) }
-    // Which FILE arg is waiting for a document pick.
     var pendingFileArg by remember { mutableStateOf<AvbArg?>(null) }
 
     val openFile = rememberLauncherForActivityResult(
@@ -98,32 +92,10 @@ fun CommandScreen(
         openFile.launch(arrayOf("*/*"))
     }
 
-    // argv: only include non-empty, non-flag values; flags are added when checked.
-    fun buildArgv(): List<String> {
-        val argv = mutableListOf(command.id)
-        val flags = mutableListOf<String>()
-        for (arg in command.args) {
-            val raw = values[arg.key].orEmpty()
-            when (arg.type) {
-                AvbArgType.BOOL -> if (raw == "true") flags.add(arg.key)
-                else -> if (raw.isNotBlank()) {
-                    argv.add(arg.key)
-                    argv.add(
-                        if (arg.type == AvbArgType.FILE) {
-                            // content uri -> SAF fd pseudo-path
-                            val fd = AvbExecutor.openFd(Uri.parse(raw))
-                            fdToPathCache[arg.key] = fd
-                            "/saf/fd/$fd"
-                        } else {
-                            raw
-                        }
-                    )
-                }
-            }
-        }
-        return argv + flags
+    fun releaseFds() {
+        fdToPathCache.values.forEach { AvbExecutor.releaseFd(it) }
+        fdToPathCache.clear()
     }
-
 
     fun run() {
         AvbExecutor.ensureStarted(context)
@@ -133,7 +105,25 @@ fun CommandScreen(
         stderr = ""
         scope.launch {
             try {
-                val result = AvbExecutor.run(buildArgv())
+                val argv = mutableListOf(command.id)
+                val flags = mutableListOf<String>()
+                for (arg in command.args) {
+                    val raw = values[arg.key].orEmpty()
+                    when (arg.type) {
+                        AvbArgType.BOOL -> if (raw == "true") flags.add(arg.key)
+                        else -> if (raw.isNotBlank()) {
+                            argv.add(arg.key)
+                            if (arg.type == AvbArgType.FILE) {
+                                val fd = AvbExecutor.openFd(Uri.parse(raw))
+                                fdToPathCache[arg.key] = fd
+                                argv.add("/saf/fd/$fd")
+                            } else {
+                                argv.add(raw)
+                            }
+                        }
+                    }
+                }
+                val result = AvbExecutor.run(argv + flags)
                 stdout = result.stdout
                 stderr = result.stderr
                 exitCode = result.exitCode
@@ -145,7 +135,7 @@ fun CommandScreen(
     }
 
     val liquidGlass = rememberLiquidGlass()
-    BoxWithGlass(command, onBack, liquidGlass) {
+    CommandScaffold(command, onBack, liquidGlass, modifier) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -154,41 +144,97 @@ fun CommandScreen(
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
             item {
-                Card {
-                    Column(Modifier.padding(12.dp)) {
-                        MiuixText(
-                            text = stringResource(command.descriptionRes),
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
-                        )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    MiuixText(
+                        text = stringResource(command.descriptionRes),
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+
+            // 输入类参数（文件/文本/数值）分组
+            val inputArgs = command.args.filter {
+                it.type != AvbArgType.BOOL &&
+                    it.type != AvbArgType.ALGO &&
+                    it.type != AvbArgType.HASH
+            }
+            if (inputArgs.isNotEmpty()) {
+                item {
+                    GroupTitle(R.string.command_section_image_configs)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column {
+                            inputArgs.forEach { arg ->
+                                when (arg.type) {
+                                    AvbArgType.FILE -> FilePreference(
+                                        arg = arg,
+                                        value = values[arg.key].orEmpty(),
+                                        onPick = { pickFile(arg) },
+                                    )
+                                    else -> EditText(
+                                        title = arg.key,
+                                        value = values[arg.key].orEmpty(),
+                                        onValueChange = { v ->
+                                            values = values + (arg.key to v)
+                                        },
+                                        textHint = arg.choices?.joinToString("/").orEmpty(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            command.args.chunked(1).forEach { chunk ->
-                val arg = chunk.first()
-                item(key = arg.key) {
-                    when (arg.type) {
-                        AvbArgType.BOOL -> SwitchPreference(
-                            title = arg.key,
-                            checked = values[arg.key] == "true",
-                            onCheckedChange = { on ->
-                                values = values + (arg.key to on.toString())
-                            },
-                        )
+            // 下拉类参数
+            val dropdownArgs = command.args.filter {
+                it.type == AvbArgType.ALGO || it.type == AvbArgType.HASH
+            }
+            if (dropdownArgs.isNotEmpty()) {
+                item {
+                    GroupTitle(R.string.command_section_key_configs)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column {
+                            dropdownArgs.forEach { arg ->
+                                val choices = arg.choices ?: emptyList()
+                                OverlayDropdownPreference(
+                                    title = arg.key,
+                                    summary = values[arg.key].orEmpty().ifBlank { choices.firstOrNull().orEmpty() },
+                                    items = choices,
+                                    selectedIndex = choices.indexOf(values[arg.key]).coerceAtLeast(0),
+                                    onSelectedIndexChange = { idx ->
+                                        values = values + (arg.key to choices[idx])
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
-                        AvbArgType.FILE -> ArgFileRow(
-                            value = values[arg.key].orEmpty(),
-                            onPick = { pickFile(arg) },
-                        )
-
-                        else -> EditText(
-                            title = arg.key,
-                            value = values[arg.key].orEmpty(),
-                            onValueChange = { v -> values = values + (arg.key to v) },
-                            textHint = arg.choices?.joinToString("/").orEmpty(),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+            // 开关类参数
+            val switchArgs = command.args.filter { it.type == AvbArgType.BOOL }
+            if (switchArgs.isNotEmpty()) {
+                item {
+                    GroupTitle(R.string.command_section_options)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column {
+                            switchArgs.forEach { arg ->
+                                SwitchPreference(
+                                    title = arg.key,
+                                    checked = values[arg.key] == "true",
+                                    onCheckedChange = { on ->
+                                        values = values + (arg.key to on.toString())
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -201,9 +247,11 @@ fun CommandScreen(
                         .fillMaxWidth()
                         .padding(vertical = 12.dp),
                 ) {
-                    MiuixText(stringResource(
-                        if (running) R.string.command_running else R.string.command_run
-                    ))
+                    MiuixText(
+                        stringResource(
+                            if (running) R.string.command_running else R.string.command_run
+                        )
+                    )
                 }
                 MiuixText(
                     text = "avbtool ${command.id}",
@@ -215,11 +263,7 @@ fun CommandScreen(
 
             if (stdout.isNotBlank() || stderr.isNotBlank()) {
                 item {
-                    ResultCard(
-                        exitCode = exitCode,
-                        stdout = stdout,
-                        stderr = stderr,
-                    )
+                    ResultCard(exitCode, stdout, stderr)
                 }
             }
         }
@@ -227,79 +271,44 @@ fun CommandScreen(
 }
 
 @Composable
-private fun BoxWithGlass(
-    command: AvbCommand,
-    onBack: () -> Unit,
-    liquidGlass: LayerBackdrop,
-    content: @Composable () -> Unit,
-) {
-    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-        androidx.compose.foundation.layout.Box(
-            Modifier.liquidGlassLayer(liquidGlass).fillMaxSize()
-        ) {
-            LiquidGlassBackground()
-        }
-        MiuixScaffold(
-            topBar = {
-                LiquidGlassTopBar(
-                    backdrop = liquidGlass,
-                    title = stringResource(command.titleRes),
-                    onBack = onBack,
-                )
-            },
-            contentWindowInsets = WindowInsets.systemBars
-                .add(WindowInsets.displayCutout)
-                .only(WindowInsetsSides.Horizontal),
-        ) { innerPadding ->
-            androidx.compose.foundation.layout.Box(Modifier.padding(innerPadding)) {
-                content()
-            }
-        }
-    }
+private fun GroupTitle(@androidx.annotation.StringRes res: Int) {
+    MiuixText(
+        text = stringResource(res),
+        style = MiuixTheme.textStyles.body2,
+        color = MiuixTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 4.dp),
+    )
 }
 
 @Composable
-private fun ArgFileRow(
+private fun FilePreference(
+    arg: AvbArg,
     value: String,
     onPick: () -> Unit,
 ) {
-    Card {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onPick)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                MiuixText(
-                    text = if (value.isBlank()) {
-                        stringResource(R.string.command_choose_file)
-                    } else {
-                        value.substringAfterLast('/')
-                    },
-                    style = MiuixTheme.textStyles.body1,
-                    maxLines = 1,
-                )
-                MiuixText(
-                    text = if (value.isBlank()) {
-                        "—"
-                    } else {
-                        value
-                    },
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
+    ArrowPreference(
+        title = arg.key,
+        summary = if (value.isBlank()) {
+            stringResource(R.string.command_choose_file)
+        } else {
+            value.substringAfterLast('/')
+        },
+        startAction = {
+            Icon(
+                imageVector = Icons.Rounded.FolderOpen,
+                modifier = Modifier.padding(end = 6.dp),
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.onBackground,
+            )
+        },
+        onClick = onPick,
+    )
 }
 
 @Composable
 private fun ResultCard(exitCode: Int?, stdout: String, stderr: String) {
     val ok = exitCode == 0
-    Card {
+    Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             MiuixText(
                 text = stringResource(
@@ -311,7 +320,7 @@ private fun ResultCard(exitCode: Int?, stdout: String, stderr: String) {
                 ),
                 style = MiuixTheme.textStyles.body1,
                 color = if (ok) MiuixTheme.colorScheme.primary
-                        else MiuixTheme.colorScheme.error,
+                else MiuixTheme.colorScheme.error,
             )
             SelectionContainer {
                 Column(Modifier.padding(top = 8.dp)) {
@@ -326,6 +335,37 @@ private fun ResultCard(exitCode: Int?, stdout: String, stderr: String) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommandScaffold(
+    command: AvbCommand,
+    onBack: () -> Unit,
+    liquidGlass: LayerBackdrop,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(modifier.fillMaxSize()) {
+        Box(Modifier.liquidGlassLayer(liquidGlass).fillMaxSize()) {
+            LiquidGlassBackground()
+        }
+        MiuixScaffold(
+            topBar = {
+                LiquidGlassTopBar(
+                    backdrop = liquidGlass,
+                    title = stringResource(command.titleRes),
+                    onBack = onBack,
+                )
+            },
+            contentWindowInsets = WindowInsets.systemBars
+                .add(WindowInsets.displayCutout)
+                .only(WindowInsetsSides.Horizontal),
+        ) { innerPadding ->
+            Box(Modifier.padding(innerPadding)) {
+                content()
             }
         }
     }

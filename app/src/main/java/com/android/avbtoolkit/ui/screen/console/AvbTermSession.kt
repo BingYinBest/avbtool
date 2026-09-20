@@ -19,6 +19,19 @@ class AvbTermSession(
 
     private val pending = java.lang.StringBuilder()
 
+    init {
+        // TermSession starts a reader thread that blocks on mTermIn.read()
+        // and a writer thread that flushes to mTermOut. We neither pipe a
+        // subprocess nor write through mTermOut (output goes through
+        // write()/appendToEmulator), so both streams are neutralised with
+        // dummies to keep the threads from NPE-ing.
+        setTermIn(java.io.ByteArrayInputStream(ByteArray(0)))
+        setTermOut(object : java.io.OutputStream() {
+            override fun write(b: Int) {}
+            override fun write(b: ByteArray, off: Int, len: Int) {}
+        })
+    }
+
     override fun processInput(data: ByteArray, offset: Int, count: Int) {
         // Feed the local emulator so typing echoes.
         appendToEmulator(data, offset, count)

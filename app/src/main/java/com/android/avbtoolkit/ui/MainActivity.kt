@@ -57,17 +57,17 @@ import com.android.avbtoolkit.ui.component.bottombar.SideRail
 import com.android.avbtoolkit.ui.component.bottombar.rememberMainPagerState
 import com.android.avbtoolkit.AvbCatalog
 import com.android.avbtoolkit.ui.screen.command.CommandScreen
-import com.android.avbtoolkit.ui.screen.console.ConsoleScreen
+import com.android.avbtoolkit.ui.screen.settings.SettingPager
 import com.android.avbtoolkit.ui.navigation3.LocalNavigator
 import com.android.avbtoolkit.ui.navigation3.Navigator
 import com.android.avbtoolkit.ui.navigation3.Route
+import com.android.avbtoolkit.ui.screen.console.ConsoleScreen
 import com.android.avbtoolkit.ui.navigation3.rememberNavigator
 import com.android.avbtoolkit.ui.screen.about.AboutScreen
 import com.android.avbtoolkit.ui.screen.colorpalette.ColorPaletteScreen
 import com.android.avbtoolkit.AvbCategory
 import com.android.avbtoolkit.ui.screen.commandlist.CommandListPager
 import com.android.avbtoolkit.ui.screen.permission.PermissionScreen
-import com.android.avbtoolkit.ui.screen.console.ConsoleScreen
 import com.android.avbtoolkit.ui.theme.TemplateTheme
 import com.android.avbtoolkit.ui.theme.LocalColorMode
 import com.android.avbtoolkit.ui.theme.LocalEnableBlur
@@ -245,10 +245,7 @@ fun MainScreen(
                         0 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, AvbCategory.IMAGE, isCurrentPage)
                         1 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, AvbCategory.VBMETA, isCurrentPage)
                         2 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, AvbCategory.OTHER, isCurrentPage)
-                        3 -> if (isCurrentPage || contentReady) ConsoleScreen(
-                            onBack = {},
-                            onOpenSettings = { navController.push(Route.Settings) },
-                        )
+                        3 -> if (isCurrentPage || contentReady) SettingPager(navController, bottomInnerPadding)
                     }
                 }
             }

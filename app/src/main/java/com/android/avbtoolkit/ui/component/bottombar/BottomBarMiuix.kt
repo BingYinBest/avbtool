@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.runtime.Composable
@@ -123,5 +123,5 @@ enum class BottomBarDestination(
     ImageTools(R.string.tab_image, Icons.Rounded.Memory),
     Vbmeta(R.string.tab_vbmeta, Icons.Rounded.Shield),
     Others(R.string.tab_others, Icons.Rounded.Extension),
-    Console(R.string.nav_console, Icons.Rounded.Terminal)
+    Setting(R.string.tab_settings, Icons.Rounded.Settings)
 }
