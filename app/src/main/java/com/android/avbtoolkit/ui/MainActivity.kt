@@ -55,19 +55,19 @@ import com.android.avbtoolkit.ui.component.bottombar.BottomBar
 import com.android.avbtoolkit.ui.component.bottombar.MainPagerState
 import com.android.avbtoolkit.ui.component.bottombar.SideRail
 import com.android.avbtoolkit.ui.component.bottombar.rememberMainPagerState
-import com.android.avbtoolkit.AvbCommands
-import com.android.avbtoolkit.CommandScreen
-import com.android.avbtoolkit.ConsoleScreen
+import com.android.avbtoolkit.AvbCatalog
+import com.android.avbtoolkit.ui.screen.command.CommandScreen
+import com.android.avbtoolkit.ui.screen.console.ConsoleScreen
 import com.android.avbtoolkit.ui.navigation3.LocalNavigator
 import com.android.avbtoolkit.ui.navigation3.Navigator
 import com.android.avbtoolkit.ui.navigation3.Route
 import com.android.avbtoolkit.ui.navigation3.rememberNavigator
 import com.android.avbtoolkit.ui.screen.about.AboutScreen
 import com.android.avbtoolkit.ui.screen.colorpalette.ColorPaletteScreen
-import com.android.avbtoolkit.HomeSegment
+import com.android.avbtoolkit.AvbCategory
 import com.android.avbtoolkit.ui.screen.commandlist.CommandListPager
 import com.android.avbtoolkit.ui.screen.permission.PermissionScreen
-import com.android.avbtoolkit.ui.screen.settings.SettingPager
+import com.android.avbtoolkit.ui.screen.console.ConsoleScreen
 import com.android.avbtoolkit.ui.theme.TemplateTheme
 import com.android.avbtoolkit.ui.theme.LocalColorMode
 import com.android.avbtoolkit.ui.theme.LocalEnableBlur
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                                 entry<Route.Home> { mainScreenEntry() }
                                 entry<Route.Settings> { mainScreenEntry() }
                                 entry<Route.Command> {
-                                    val command = AvbCommands.byId(it.id)
+                                    val command = AvbCatalog.byId(it.id)
                                     if (command != null) {
                                         CommandScreen(command = command, onBack = { navigator.pop() })
                                     } else {
@@ -242,10 +242,13 @@ fun MainScreen(
                 ) { page ->
                     val isCurrentPage = page == settledPage
                     when (page) {
-                        0 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, HomeSegment.IMAGE_TOOLS, isCurrentPage)
-                        1 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, HomeSegment.VBMETA, isCurrentPage)
-                        2 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, HomeSegment.OTHERS, isCurrentPage)
-                        3 -> if (isCurrentPage || contentReady) SettingPager(navController, bottomInnerPadding)
+                        0 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, AvbCategory.IMAGE, isCurrentPage)
+                        1 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, AvbCategory.VBMETA, isCurrentPage)
+                        2 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, AvbCategory.OTHER, isCurrentPage)
+                        3 -> if (isCurrentPage || contentReady) ConsoleScreen(
+                            onBack = {},
+                            onOpenSettings = { navController.push(Route.Settings) },
+                        )
                     }
                 }
             }

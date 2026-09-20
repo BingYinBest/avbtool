@@ -1,10 +1,11 @@
 @file:Suppress("UnstableApiUsage")
 
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.agp.app)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.lsplugin.apksign)
     alias(libs.plugins.chaquopy)
     id("kotlin-parcelize")
 }
@@ -19,20 +20,41 @@ val androidTargetCompatibility: JavaVersion by rootProject.extra
 val managerVersionCode: Int by rootProject.extra
 val managerVersionName: String by rootProject.extra
 
-apksign {
-    storeFileProperty = "KEYSTORE_FILE"
-    storePasswordProperty = "KEYSTORE_PASSWORD"
-    keyAliasProperty = "KEY_ALIAS"
-    keyPasswordProperty = "KEY_PASSWORD"
+// Signing credentials live in local.properties (git-ignored); passwords are
+// read via java.util.Properties so `\#` escapes inside them decode correctly.
+fun loadSigningProperties(): Properties {
+    val p = Properties()
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { p.load(it) }
+    return p
 }
+
+val signingProps = loadSigningProperties()
+val signingStoreFile = signingProps.getProperty("KEYSTORE_FILE", "keystore/Clover.jks")
+val signingStorePassword = signingProps.getProperty("KEYSTORE_PASSWORD", "")
+val signingAlias = signingProps.getProperty("KEY_ALIAS", "Clover")
+val signingKeyPassword = signingProps.getProperty("KEY_PASSWORD", "")
 
 android {
     namespace = "com.android.avbtoolkit"
     ndkVersion = "29.0.14206865"
     val isPrBuild = project.findProperty("IS_PR_BUILD")?.toString()?.toBoolean() ?: false
 
+    signingConfigs {
+        create("clover") {
+            storeFile = rootProject.file(signingStoreFile)
+            storePassword = signingStorePassword
+            keyAlias = signingAlias
+            keyPassword = signingKeyPassword
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("clover")
+        }
         release {
+            signingConfig = signingConfigs.getByName("clover")
             isMinifyEnabled = true
             isShrinkResources = true
             vcsInfo.include = false

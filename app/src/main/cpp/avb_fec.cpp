@@ -1,51 +1,101 @@
-// SPDX-License-Identifier: Apache-2.0
-//
-// AVBTool Android native FEC bridge.
-//
-// This file is part of the AVBTool Android project and is licensed
-// under the Apache License, Version 2.0. It dynamically links against
-// libfec_rs.so, which contains LGPL-2.1-licensed Reed-Solomon code
-// (Copyright 2002-2004 Phil Karn, KA9Q). See fec_rs/ for source.
+/*
+ * Copyright (C) 2026 The AVBToolkit Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <string>
+/*
+ * Native FEC encoder for AVBToolkit.
+ *
+ * Algorithm and on-disk layout follow the AOSP implementation
+ * verbatim:
+ *
+ *   - Reed-Solomon RS(255, N) codec: AOSP external/fec
+ *     (libfec_rs, LGPL-2.1, Phil Karn KA9Q) — see fec_rs/.
+ *   - FEC framing (rounds, interleaving, header block): AOSP
+ *     system/extras/verity/fec (image.cpp, image.h, main.cpp) and
+ *     system/extras/libfec/include/fec/{ecc,io}.h — Apache-2.0.
+ *
+ * This file only provides the glue between Python (ctypes), a plain
+ * file descriptor and the official codec; it contains no FEC logic of
+ * its own beyond what the AOSP sources above define.
+ *
+ * Exposed symbols (see android_bridge.py):
+ *   avb_fec_print_size(image_size, roots) -> uint64
+ *   avb_fec_encode(in_fd, out_path, roots) -> int
+ *
+ * Both mirror `fec --print-fec-size` and `fec --encode` respectively;
+ * sparse images are rejected (raw images only), matching the AOSP
+ * `fec` tool behaviour when the input is not sparse.
+ */
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <vector>
 
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-// libfec_rs (AOSP external/fec, LGPL-2.1) char-based Reed-Solomon codec.
 extern "C" {
-void *init_rs_char(int symsize, int gfpoly, int fcr, int prim,
-                   int nroots, int pad);
+void *init_rs_char(int symsize, int gfpoly, int fcr, int prim, int nroots,
+                   int pad);
 void encode_rs_char(void *p, unsigned char *data, unsigned char *parity);
 void free_rs_char(void *p);
 }
 
 namespace {
 
-constexpr uint32_t FEC_MAGIC = 0xFECFECFE;
-constexpr uint32_t FEC_VERSION = 0;
-constexpr uint32_t FEC_BLOCKSIZE = 4096;
+// From AOSP system/extras/libfec/include/fec/ecc.h
+constexpr uint64_t FEC_BLOCKSIZE = 4096;
 constexpr uint32_t FEC_RSM = 255;
 
-// Minimal public-domain SHA-256 implementation for the FEC header hash.
+// From AOSP system/extras/libfec/include/fec/io.h
+constexpr uint32_t FEC_MAGIC = 0xFECFECFE;
+constexpr uint32_t FEC_VERSION = 0;
+// sizeof(struct fec_header), packed: u32 magic, u32 version, u32 size,
+// u32 roots, u32 fec_size, u64 inp_size, u8 hash[32] = 60 bytes.
+constexpr uint32_t FEC_HEADER_SIZE = 60;
+
+// image.h fec_div_round_up / fec_ecc_interleave (AOSP verity/fec).
+uint64_t fec_div_round_up(uint64_t x, uint64_t y) {
+  return (x / y) + (x % y > 0 ? 1 : 0);
+}
+
+uint64_t fec_ecc_interleave(uint64_t offset, uint64_t rsn, uint64_t rounds) {
+  return (offset / rsn) + (offset % rsn) * rounds * FEC_BLOCKSIZE;
+}
+
+// Minimal SHA-256 (public domain / reference implementation style).
 struct Sha256 {
   static constexpr uint32_t K[64] = {
-    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2};
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+      0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+      0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+      0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+      0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+      0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+      0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+      0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+      0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
-  uint32_t h[8] = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
-                   0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
+  uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                   0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
   uint64_t total = 0;
   uint8_t buf[64];
   size_t buf_len = 0;
@@ -72,11 +122,23 @@ struct Sha256 {
       uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
       uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
       uint32_t t2 = S0 + maj;
-      hh = g; g = f; f = e; e = d + t1;
-      d = c; c = b; b = a; a = t1 + t2;
+      hh = g;
+      g = f;
+      f = e;
+      e = d + t1;
+      d = c;
+      c = b;
+      b = a;
+      a = t1 + t2;
     }
-    h[0] += a; h[1] += b; h[2] += c; h[3] += d;
-    h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    h[0] += a;
+    h[1] += b;
+    h[2] += c;
+    h[3] += d;
+    h[4] += e;
+    h[5] += f;
+    h[6] += g;
+    h[7] += hh;
   }
 
   void update(const uint8_t *data, size_t len) {
@@ -113,28 +175,10 @@ struct Sha256 {
   }
 };
 
-uint64_t div_round_up(uint64_t x, uint64_t y) {
-  return (x / y) + (x % y > 0 ? 1 : 0);
-}
-
-uint64_t fec_ecc_interleave(uint64_t offset, uint64_t rsn, uint64_t rounds) {
-  return (offset / rsn) + (offset % rsn) * rounds * FEC_BLOCKSIZE;
-}
-
 int write_all(int fd, const uint8_t *buf, size_t len) {
   size_t off = 0;
   while (off < len) {
     ssize_t n = ::write(fd, buf + off, len - off);
-    if (n <= 0) return -1;
-    off += size_t(n);
-  }
-  return 0;
-}
-
-int read_all(int fd, uint8_t *buf, size_t len) {
-  size_t off = 0;
-  while (off < len) {
-    ssize_t n = ::pread(fd, buf + off, len - off, (off_t)off);
     if (n <= 0) return -1;
     off += size_t(n);
   }
@@ -151,23 +195,24 @@ int64_t file_size(int fd) {
 
 extern "C" uint64_t avb_fec_print_size(uint64_t image_size, int roots) {
   if (roots <= 0 || roots >= (int)FEC_RSM || image_size == 0) return 0;
-  uint64_t blocks = div_round_up(image_size, FEC_BLOCKSIZE);
-  uint64_t rounds = div_round_up(blocks, FEC_RSM - (uint64_t)roots);
+  // AOSP ecc.h fec_ecc_get_size():
+  //   ceil(ceil(image_size / 4096) / (255 - roots)) * roots * 4096 + 4096
+  uint64_t blocks = fec_div_round_up(image_size, FEC_BLOCKSIZE);
+  uint64_t rounds = fec_div_round_up(blocks, FEC_RSM - (uint64_t)roots);
   return rounds * (uint64_t)roots * FEC_BLOCKSIZE + FEC_BLOCKSIZE;
 }
 
 extern "C" int avb_fec_encode(int in_fd, const char *out_path, int roots) {
-  if (roots <= 0 || roots >= (int)FEC_RSM) return -1;
-  if (in_fd < 0 || out_path == nullptr) return -1;
+  if (roots <= 0 || roots >= (int)FEC_RSM || in_fd < 0 || out_path == nullptr)
+    return -1;
 
-  int64_t size64 = file_size(in_fd);
-  if (size64 < 0) return -1;
-  uint64_t inp_size = (uint64_t)size64;
-  if (inp_size == 0 || (inp_size % FEC_BLOCKSIZE) != 0) return -1;
+  int64_t sz = file_size(in_fd);
+  if (sz <= 0 || (uint64_t)sz % FEC_BLOCKSIZE != 0) return -1;
+  uint64_t inp_size = (uint64_t)sz;
 
-  uint64_t blocks = div_round_up(inp_size, FEC_BLOCKSIZE);
+  uint64_t blocks = fec_div_round_up(inp_size, FEC_BLOCKSIZE);
   uint64_t rsn = FEC_RSM - (uint64_t)roots;
-  uint64_t rounds = div_round_up(blocks, rsn);
+  uint64_t rounds = fec_div_round_up(blocks, rsn);
   uint64_t fec_size = rounds * (uint64_t)roots * FEC_BLOCKSIZE;
 
   void *rs = init_rs_char(8, 0x11d, 0, 1, roots, 0);
@@ -179,81 +224,69 @@ extern "C" int avb_fec_encode(int in_fd, const char *out_path, int roots) {
     return -1;
   }
 
-  std::vector<uint8_t> fec(fec_size);
-  std::vector<uint8_t> parity(roots);
-
-  const uint64_t codewords = rounds * FEC_BLOCKSIZE;
-  const uint64_t stride = codewords;  // fec_ecc_interleave row stride
-  const uint64_t BLOCK = 65536;       // codewords per block
-  std::vector<uint8_t> data(BLOCK * rsn);
-  std::vector<uint8_t> colbuf(BLOCK);
-
-  auto pread_exact = [&](int fd, uint8_t *dst, size_t len, uint64_t off) -> int {
+  // Allocate the full input; images here are sized in whole 4 KiB blocks
+  // (verified above) and the FEC layout reads every input byte once.
+  std::vector<uint8_t> input(inp_size);
+  {
     size_t got = 0;
-    while (got < len) {
-      ssize_t n = ::pread(fd, dst + got, len - got, (off_t)(off + got));
-      if (n < 0) return -1;
-      if (n == 0) break;  // EOF: remainder is zero-padded
-      got += (size_t)n;
+    while (got < inp_size) {
+      ssize_t n = ::pread(in_fd, input.data() + got, inp_size - got,
+                          (off_t)got);
+      if (n <= 0) {
+        free_rs_char(rs);
+        ::close(out_fd);
+        return -1;
+      }
+      got += size_t(n);
     }
-    memset(dst + got, 0, len - got);
-    return 0;
-  };
+  }
+
+  std::vector<uint8_t> fec(fec_size);
 
   int rc = 0;
-  for (uint64_t cw_start = 0; cw_start < codewords && rc == 0; cw_start += BLOCK) {
-    uint64_t block_len = codewords - cw_start;
-    if (block_len > BLOCK) block_len = BLOCK;
+  // AOSP main.cpp encode_rs(): `end = rounds * rs_n * FEC_BLOCKSIZE`,
+  // iterating once per RS block (rounds * 4096 codewords in total), each
+  // codeword spanning rsn interleaved bytes.
+  uint64_t limit = rounds * rsn * FEC_BLOCKSIZE;
+  uint64_t fec_pos = 0;
 
+  for (uint64_t i = 0; i < limit; i += rsn) {
+    uint8_t data[FEC_RSM];
     for (uint64_t j = 0; j < rsn; ++j) {
-      uint64_t off = j * stride + cw_start;
-      if (pread_exact(in_fd, colbuf.data(), (size_t)block_len, off) != 0) {
-        rc = -1;
-        break;
-      }
-      for (uint64_t c = 0; c < block_len; ++c) {
-        data[c * rsn + j] = colbuf[c];
-      }
+      uint64_t off = fec_ecc_interleave(i + j, rsn, rounds);
+      data[j] = off < inp_size ? input[off] : 0;
     }
-    if (rc != 0) break;
-
-    for (uint64_t c = 0; c < block_len; ++c) {
-      encode_rs_char(rs, data.data() + c * rsn, parity.data());
-      memcpy(fec.data() + (cw_start + c) * (uint64_t)roots, parity.data(), roots);
-    }
+    encode_rs_char(rs, data, &fec[fec_pos]);
+    fec_pos += (uint64_t)roots;
   }
 
-  if (rc == 0) {
-    if (write_all(out_fd, fec.data(), fec.size()) != 0) rc = -1;
-  }
+  if (rc == 0 && write_all(out_fd, fec.data(), fec.size()) != 0) rc = -1;
 
   if (rc == 0) {
-    uint8_t header[FEC_BLOCKSIZE];
-    memset(header, 0, sizeof(header));
-    // fec_header is packed at the start of the header block, and a copy is
-    // placed in the final 60 bytes of the block (AOSP image_ecc_save).
-    auto write_header = [&](uint8_t *hdr) {
-      uint32_t magic = FEC_MAGIC;
-      uint32_t version = FEC_VERSION;
-      uint32_t header_size = 60;  // sizeof(fec_header)
-      uint32_t roots32 = (uint32_t)roots;
-      uint32_t fec_size32 = (uint32_t)fec_size;
-      uint64_t inp_size64 = inp_size;
-      uint8_t hash[32];
-      Sha256 sha;
-      sha.update(fec.data(), fec.size());
-      sha.finish(hash);
+    // AOSP image_ecc_save(): a zeroed 4 KiB header block with fec_header
+    // at the start and a trailing copy of the header.
+    uint8_t header[FEC_BLOCKSIZE] = {0};
+    uint32_t magic = FEC_MAGIC;
+    uint32_t version = FEC_VERSION;
+    uint32_t size = FEC_HEADER_SIZE;
+    uint32_t roots32 = (uint32_t)roots;
+    uint32_t fec_size32 = (uint32_t)fec_size;
+    uint64_t inp_size64 = inp_size;
+    uint8_t hash[32];
+    Sha256 sha;
+    sha.update(fec.data(), fec.size());
+    sha.finish(hash);
 
-      memcpy(hdr, &magic, 4);
-      memcpy(hdr + 4, &version, 4);
-      memcpy(hdr + 8, &header_size, 4);
-      memcpy(hdr + 12, &roots32, 4);
-      memcpy(hdr + 16, &fec_size32, 4);
-      memcpy(hdr + 20, &inp_size64, 8);
-      memcpy(hdr + 28, hash, 32);
-    };
-    write_header(header);
-    memcpy(header + FEC_BLOCKSIZE - 60, header, 60);
+    memcpy(header, &magic, 4);
+    memcpy(header + 4, &version, 4);
+    memcpy(header + 8, &size, 4);
+    memcpy(header + 12, &roots32, 4);
+    memcpy(header + 16, &fec_size32, 4);
+    memcpy(header + 20, &inp_size64, 8);
+    memcpy(header + 28, hash, 32);
+    // Trailing copy of fec_header in the last bytes of the 4 KiB block.
+    memcpy(header + FEC_BLOCKSIZE - FEC_HEADER_SIZE, header, FEC_HEADER_SIZE);
+
     if (write_all(out_fd, header, sizeof(header)) != 0) rc = -1;
   }
 

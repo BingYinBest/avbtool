@@ -9,10 +9,11 @@ Components bundled in the APK:
   (Copyright 2016, The Android Open Source Project), patched to run
   on-device (see app/src/main/python/).
 - `android_bridge.py` — SAF fd bridge, native FEC binding, RSA helpers.
-  Apache-2.0, adapted from the AVBTool Android (Compose) project
-  (WASDDestroy).
-- `libavbfec.so` (avb_fec.cpp) — native AVB FEC encoder bridge.
-  Apache-2.0, adapted from the AVBTool Android (Compose) project.
+  Apache-2.0 (AVBToolkit authors).
+- `libavbfec.so` (avb_fec.cpp) — native AVB FEC encoder bridge. Apache-2.0
+  (AVBToolkit authors); implements the layout defined by AOSP
+  system/extras/verity/fec and libfec (image.cpp/main.cpp/ecc.h), linking
+  the LGPL RS codec from AOSP external/fec.
 - `libfec_rs.so` (app/src/main/cpp/fec_rs/) — RS(255, N) Reed-Solomon
   codec from AOSP external/fec. **LGPL-2.1** (Copyright 2002-2004
   Phil Karn, KA9Q). Kept as a separate shared library so it can be

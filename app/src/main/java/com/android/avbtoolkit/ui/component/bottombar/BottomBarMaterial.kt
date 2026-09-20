@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.FlexibleBottomAppBar
 import androidx.compose.material3.Icon
@@ -33,7 +33,7 @@ fun BottomBarMaterial() {
         Triple(R.string.tab_image, Icons.Filled.Memory, Icons.Outlined.Memory),
         Triple(R.string.tab_vbmeta, Icons.Filled.Shield, Icons.Outlined.Shield),
         Triple(R.string.tab_others, Icons.Filled.Extension, Icons.Outlined.Extension),
-        Triple(R.string.tab_settings, Icons.Filled.Settings, Icons.Outlined.Settings)
+        Triple(R.string.nav_console, Icons.Filled.Terminal, Icons.Outlined.Terminal)
     )
 
     FlexibleBottomAppBar(

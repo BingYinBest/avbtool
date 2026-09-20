@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compare device-generated avbtool outputs against the host reference
 # artifacts in host/ (produced by AOSP external/avb main avbtool.py
-# 1.4.0 with openssl on the host; byte-verified identical to the in-app
-# patched avbtool.py 1.4.0 + cryptography 42.0.8 run on the host).
+# 1.3.0 with openssl on the host; byte-verified identical to the in-app
+# patched avbtool.py 1.3.0 + cryptography 42.0.8 run on the host).
 #
 # NOTE: add_hashtree_footer APPENDS the hash tree to the input image,
 # so e2e_tree.img is mutated by each run. Regenerate the images from

@@ -379,4 +379,12 @@
 <string name="tab_settings">设置</string>
 <string name="settings_console_title">avbtool 终端</string>
 <string name="settings_console_summary">在终端中执行 avbtool 命令</string>
+    <string name="command_generate_test_image_title">生成测试映像</string>
+    <string name="command_generate_test_image_description">生成带已知字节图案的测试映像</string>
+    <string name="command_version_title">版本</string>
+    <string name="command_version_description">打印 avbtool 版本信息</string>
+    <string name="command_update_partition_descriptor_title">更新分区描述符</string>
+    <string name="command_update_partition_descriptor_description">在已有 vbmeta 映像中更新分区描述符</string>
+    <string name="command_resign_image_title">重新签名映像</string>
+    <string name="command_resign_image_description">用新密钥替换映像的签名</string>
 </resources>

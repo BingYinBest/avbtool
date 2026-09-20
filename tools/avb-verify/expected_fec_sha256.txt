@@ -1,4 +1,5 @@
-FEC self-test reference (AOSP external/fec RS(255,N) + avb_fec.cpp layout)
+FEC self-test reference (AOSP external/fec RS(255,N) + AOSP verity/fec layout,
+own implementation in avb_fec.cpp)
 image: selftest.img (deterministic 1 MiB, (bytes(range(256))*16)*256)
 roots: 2
 fec_parity_bytes: 16384
@@ -7,8 +8,9 @@ fec_parity_sha256: aae08208d5c26f8cab9f6662b00c63b43369432e24c1ec2ec981498008500
 device check: console -> avbtool_fec_self_test
 match when: fec_parity_bytes == 16384 AND fec_parity_sha256 == aae08208...
 
-avbtool E2E baseline = AOSP external/avb main (avbtool 1.4.0) + host openssl.
-Device side runs the bundled 1.4.0 avbtool.py + cryptography 42.0.8.
+avbtool E2E baseline = AOSP external/avb main (avbtool 1.3.0) + host openssl.
+Device side runs the bundled avbtool.py (official 1.3.0 base + cryptography/native
+FEC patches) inside Chaquopy.
 (FRESH images per run — see compare_avb_outputs.sh header.)
 calculate_vbmeta_digest(device vbmeta_signed.img) =>
 40f2d71cc2029d66b0f9a4b4d4f53c68803b570b7878a7418fdbaf6c2b4d0d23

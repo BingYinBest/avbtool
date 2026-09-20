@@ -36,8 +36,7 @@ itself derived from the original libfec by Phil Karn, KA9Q).
 
 android_bridge.py (SAF fd bridge + native FEC + RSA helpers)
 
-copyright (c) 2026 the AVBToolkit authors, adapted from
-the AVBTool Android (Compose) project (WASDDestroy, Apache-2.0)
+copyright (c) 2026 the AVBToolkit authors. Apache-2.0.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,8 +48,11 @@ You may obtain a copy of the License at
 
 avb_fec.cpp (native AVB FEC encoder bridge, libavbfec.so)
 
-copyright (c) 2026 the AVBToolkit authors, adapted from
-the AVBTool Android (Compose) project (WASDDestroy, Apache-2.0)
+copyright (c) 2026 the AVBToolkit authors. Apache-2.0.
+The encoder implements the FEC framing defined by AOSP
+system/extras/verity/fec (image.cpp/main.cpp, Apache-2.0) and
+system/extras/libfec/include/fec/{ecc,io}.h; the Reed-Solomon core is
+the AOSP external/fec codec kept separately as libfec_rs.so (LGPL-2.1).
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
