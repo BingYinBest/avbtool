@@ -5,7 +5,7 @@ License v3.0. See LICENSE.
 
 Components bundled in the APK:
 
-- `avbtool.py` — AOSP external/avb avbtool, MIT
+- `avbtool.py` — AOSP external/avb avbtool (main, v1.4.0), MIT
   (Copyright 2016, The Android Open Source Project), patched to run
   on-device (see app/src/main/python/).
 - `android_bridge.py` — SAF fd bridge, native FEC binding, RSA helpers.

@@ -1,11 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name" translatable="false">AVBToolkit</string>
-    <string name="home_sample_notification" translatable="false">这是一条示例通知</string>
-    <string name="home_app_version" translatable="false">App 版本</string>
-    <string name="home_example_link_title" translatable="false">这是一条示例链接</string>
-    <string name="home_example_link_subtitle" translatable="false">这是示例链接的副标题</string>
-    <string name="home_example_link_url" translatable="false">https://github.com/chenaizhang/KernelSU-Style-UI-Kit</string>
     <string name="about_source_link" translatable="false">在%1$s 上查看源码</string>
     <string name="permission_section">Permissions</string>
     <string name="permission_ready">Core permissions are ready.</string>
@@ -18,7 +13,6 @@
     <string name="permission_granted">Granted</string>
     <string name="permission_required">Required</string>
     <string name="permission_optional">Optional</string>
-    <string name="permission_action_required">Action Required</string>
     <string name="permission_grant_action">Grant</string>
     <string name="permission_status_ready_title">Permissions Ready</string>
     <string name="permission_status_missing_title">Permissions Required</string>
@@ -73,7 +67,6 @@
 <string name="home_segment_image_tools">Image</string>
 <string name="home_segment_vbmeta" translatable="false">VBMeta</string>
 <string name="home_segment_others">Other</string>
-<string name="command_back">Back</string>
 <string name="command_run">Run</string>
 <string name="command_running">Running…</string>
 <string name="command_output">Output</string>
@@ -383,5 +376,10 @@
 <string name="rollback_warning_invalid">Value %1$s is not a writable 64-bit unsigned integer (0 to 18446744073709551615). avbtool cannot write this value.</string>
 <string name="rollback_warning_continue">Continue anyway</string>
 <string name="rollback_warning_continue_countdown">Continue anyway (%1$d)</string>
-<string name="nav_console_summary">Run avbtool commands from a real terminal</string>
+<string name="tab_image">Image</string>
+<string name="tab_vbmeta">vbmeta</string>
+<string name="tab_others">Others</string>
+<string name="tab_settings">Settings</string>
+<string name="settings_console_title">avbtool terminal</string>
+<string name="settings_console_summary">Run avbtool commands in a real terminal</string>
 </resources>

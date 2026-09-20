@@ -17,11 +17,16 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import android.annotation.SuppressLint
 import com.android.avbtoolkit.ui.theme.isInDarkTheme
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.floor
 
+// Every path into this composable is gated by isRuntimeShaderSupported()
+// (API 33+); the API-33 calls below are safe at runtime but invisible to
+// lint's static analysis.
+@SuppressLint("NewApi")
 @Composable
 fun BgEffectBackground(
     dynamicBackground: Boolean,

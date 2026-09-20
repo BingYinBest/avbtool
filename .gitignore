@@ -13,3 +13,5 @@ keystore/
 
 # AiCode agent config
 .aicode/
+__pycache__/
+*.pyc

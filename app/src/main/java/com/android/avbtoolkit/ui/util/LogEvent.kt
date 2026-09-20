@@ -3,7 +3,7 @@ package com.android.avbtoolkit.ui.util
 import android.content.Context
 import android.os.Build
 import android.system.Os
-import com.android.avbtoolkit.ui.screen.home.getAppVersion
+import com.android.avbtoolkit.ui.util.getAppVersion
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

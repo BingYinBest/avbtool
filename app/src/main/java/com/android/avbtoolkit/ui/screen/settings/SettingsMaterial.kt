@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContactPage
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -120,6 +121,19 @@ fun SettingPagerMaterial(
             SegmentedColumn(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 content = listOf(
+                    {
+                        SegmentedListItem(
+                            onClick = actions.onOpenConsole,
+                            headlineContent = { Text(stringResource(id = R.string.settings_console_title)) },
+                            supportingContent = { Text(stringResource(id = R.string.settings_console_summary)) },
+                            leadingContent = {
+                                Icon(
+                                    Icons.Filled.Terminal,
+                                    stringResource(id = R.string.settings_console_title)
+                                )
+                            },
+                        )
+                    },
                     {
                         SegmentedListItem(
                             onClick = { showBottomSheet = true },

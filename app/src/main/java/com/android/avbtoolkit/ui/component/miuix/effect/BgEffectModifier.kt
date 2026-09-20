@@ -2,6 +2,7 @@
 
 package com.android.avbtoolkit.ui.component.miuix.effect
 
+import android.annotation.SuppressLint
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -157,6 +158,10 @@ private class BgEffectNode(
         }
     }
 
+    // bgEffectDraw is only reachable when isRuntimeShaderSupported() is true
+    // (API 33+); the BgEffectPainter calls below are runtime-safe but lint
+    // cannot see the guard.
+    @SuppressLint("NewApi")
     override fun ContentDrawScope.draw() {
         drawRect(surface)
         if (effectBackground) {

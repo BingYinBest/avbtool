@@ -11,7 +11,6 @@
     <string name="permission_granted">已授权</string>
     <string name="permission_required">必需</string>
     <string name="permission_optional">可选</string>
-    <string name="permission_action_required">待处理</string>
     <string name="permission_grant_action">去授权</string>
     <string name="permission_status_ready_title">授权已完成</string>
     <string name="permission_status_missing_title">需要完成授权</string>
@@ -65,7 +64,6 @@
     <string name="nav_console">控制台</string>
 <string name="home_segment_image_tools">映像</string>
 <string name="home_segment_others">其他</string>
-<string name="command_back">返回</string>
 <string name="command_run">运行</string>
 <string name="command_running">正在运行…</string>
 <string name="command_output">输出</string>
@@ -361,9 +359,10 @@
 <string name="rollback_mismatch_message">所选镜像已包含有效的 AVB 页脚，其 vbmeta 头中的防回滚指数为 %1$s。签名会将其替换为 %2$s：更高的值一旦被设备接受将永久抬高存储的最低值；更低的值可能导致镜像无法通过设备验证。是否继续？</string>
 <string name="result_popup_close">关闭</string>
     <plurals name="command_chain_partitions_count">
-        <item quantity="one">%d 个链式分区</item>
+        <item quantity="other">%d 个链式分区</item>
     </plurals>
     <plurals name="command_files_selected">
+        <item quantity="other">%d 个文件已选择</item>
     </plurals>
 <string name="rollback_warning_title">检测到异常的防回滚指数</string>
 <string name="rollback_warning_intro">防回滚指数是 AVB 体系中唯一会写入 RPMB 的值。设备一旦接受签名镜像，其存储的最低值将被永久抬高，旧镜像将无法再启动。</string>
@@ -373,6 +372,11 @@
 <string name="rollback_warning_invalid">值 %1$s 不是可写入的 64 位无符号整数（0 ～ 18446744073709551615），avbtool 无法写入该值。</string>
 <string name="rollback_warning_continue">仍要继续</string>
 <string name="rollback_warning_continue_countdown">仍要继续（%1$d）</string>
-<string name="nav_console_summary">在真实终端中运行 avbtool 命令</string>
 <string name="home_segment_vbmeta">VBMeta 生成</string>
+<string name="tab_image">映像</string>
+<string name="tab_vbmeta">vbmeta</string>
+<string name="tab_others">其他</string>
+<string name="tab_settings">设置</string>
+<string name="settings_console_title">avbtool 终端</string>
+<string name="settings_console_summary">在终端中执行 avbtool 命令</string>
 </resources>

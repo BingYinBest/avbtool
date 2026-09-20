@@ -64,7 +64,8 @@ import com.android.avbtoolkit.ui.navigation3.Route
 import com.android.avbtoolkit.ui.navigation3.rememberNavigator
 import com.android.avbtoolkit.ui.screen.about.AboutScreen
 import com.android.avbtoolkit.ui.screen.colorpalette.ColorPaletteScreen
-import com.android.avbtoolkit.ui.screen.home.HomePager
+import com.android.avbtoolkit.HomeSegment
+import com.android.avbtoolkit.ui.screen.commandlist.CommandListPager
 import com.android.avbtoolkit.ui.screen.permission.PermissionScreen
 import com.android.avbtoolkit.ui.screen.settings.SettingPager
 import com.android.avbtoolkit.ui.theme.TemplateTheme
@@ -241,8 +242,10 @@ fun MainScreen(
                 ) { page ->
                     val isCurrentPage = page == settledPage
                     when (page) {
-                        0 -> if (isCurrentPage || contentReady) HomePager(navController, bottomInnerPadding, isCurrentPage)
-                        1 -> if (isCurrentPage || contentReady) SettingPager(navController, bottomInnerPadding)
+                        0 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, HomeSegment.IMAGE_TOOLS, isCurrentPage)
+                        1 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, HomeSegment.VBMETA, isCurrentPage)
+                        2 -> if (isCurrentPage || contentReady) CommandListPager(navController, bottomInnerPadding, HomeSegment.OTHERS, isCurrentPage)
+                        3 -> if (isCurrentPage || contentReady) SettingPager(navController, bottomInnerPadding)
                     }
                 }
             }

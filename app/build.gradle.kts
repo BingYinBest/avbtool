@@ -95,6 +95,9 @@ android {
     lint {
         abortOnError = true
         checkReleaseBuilds = false
+        // avbtool 命令/参数文案有意仅提供英文与简体中文（与上游 AVBTool
+        // Android 项目一致），其余 40+ 语言区缺失属预期行为。
+        disable += "MissingTranslation"
     }
 
     compileOptions {
