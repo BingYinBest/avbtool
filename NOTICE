@@ -1,0 +1,30 @@
+# AVBToolkit — Open Source Notices
+
+AVBToolkit (this application) is licensed under the GNU General Public
+License v3.0. See LICENSE.
+
+Components bundled in the APK:
+
+- `avbtool.py` — AOSP external/avb avbtool, MIT
+  (Copyright 2016, The Android Open Source Project), patched to run
+  on-device (see app/src/main/python/).
+- `android_bridge.py` — SAF fd bridge, native FEC binding, RSA helpers.
+  Apache-2.0, adapted from the AVBTool Android (Compose) project
+  (WASDDestroy).
+- `libavbfec.so` (avb_fec.cpp) — native AVB FEC encoder bridge.
+  Apache-2.0, adapted from the AVBTool Android (Compose) project.
+- `libfec_rs.so` (app/src/main/cpp/fec_rs/) — RS(255, N) Reed-Solomon
+  codec from AOSP external/fec. **LGPL-2.1** (Copyright 2002-2004
+  Phil Karn, KA9Q). Kept as a separate shared library so it can be
+  replaced/relinked independently, as required by the LGPL. Full text:
+  LICENSES/LGPL-2.1.txt and app/src/main/assets/LGPL-2.1.txt.
+- TermOnePlus emulatorview (app/src/main/java/jackpal/,
+  com/termoneplus/) — vendored terminal emulator view, Apache-2.0.
+- Chaquopy (embedded Python 3.13) — MIT. See chaquopy.com/chaquopy.
+- Liquid Glass Backdrop (io.github.kyant0:backdrop) — Apache-2.0,
+  https://github.com/Kyant0/AndroidLiquidGlass.
+- Miuix KMP (top.yukonga.miuix.kmp:*) — Apache-2.0,
+  https://github.com/miuix-kotlin-multiplatform/miuix.
+- UI template: KernelSU Style UI Kit (chenaizhang), GPL-3.0.
+
+Full per-component license texts: app/src/main/assets/open_source_licenses.txt

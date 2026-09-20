@@ -1,0 +1,3 @@
+tools/avb-verify/.dep/
+tools/avb-verify/fec_ref
+tools/avb-verify/selftest_ref_parity.bin

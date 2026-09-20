@@ -1,0 +1,14 @@
+FEC self-test reference (AOSP external/fec RS(255,N) + avb_fec.cpp layout)
+image: selftest.img (deterministic 1 MiB, (bytes(range(256))*16)*256)
+roots: 2
+fec_parity_bytes: 16384
+fec_parity_sha256: aae08208d5c26f8cab9f6662b00c63b43369432e24c1ec2ec98149800850033c
+
+device check: console -> avbtool_fec_self_test
+match when: fec_parity_bytes == 16384 AND fec_parity_sha256 == aae08208...
+
+avbtool E2E (device console, FRESH images regenerated per run — see
+compare_avb_outputs.sh header; add_hashtree_footer appends the hashtree
+to the input image and mutates it):
+calculate_vbmeta_digest on the device-generated vbmeta_signed.img =>
+020de715bc8ac4359b96f65f0ea836d3a502c61b5d1a32a3a526b60dcb27df42
