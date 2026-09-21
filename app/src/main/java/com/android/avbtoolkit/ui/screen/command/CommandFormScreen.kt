@@ -57,9 +57,6 @@ import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
  * Form for a single avbtool command. Arguments are grouped into cards:
@@ -105,6 +102,13 @@ private fun CommandFormMiuix(
 
     // 输出类文件参数：需要 rw 打开
     val outKeys = setOf("--output", "--output_vbmeta_image", "--vbmeta_image", "--pkmd", "--output_pubkey", "--misc_image")
+    // 就地修改镜像的命令：--image 必须可写（写 footer/truncate 等），
+    // 否则 SAF 只读 fd 上 truncate 会抛 OSError EINVAL。
+    val modifyInPlace = setOf(
+        "erase_footer", "add_hash_footer", "add_hashtree_footer",
+        "resign_image", "resize_image", "zero_hashtree",
+        "append_vbmeta_image", "update_partition_descriptor",
+    )
 
     // 输入类参数：值可能是 SAF content:// uri，也可能是用户手填的路径
     // （如 /data/local/tmp/boot.img）。手填路径时直接传给 avbtool，由
@@ -127,7 +131,9 @@ private fun CommandFormMiuix(
                             argv.add(arg.key)
                             if (arg.type == AvbArgType.FILE) {
                                 if (raw.startsWith("content://")) {
-                                    val fd = if (arg.key in outKeys) {
+                                    val needWrite = arg.key in outKeys ||
+                                        (arg.key == "--image" && command.id in modifyInPlace)
+                                    val fd = if (needWrite) {
                                         AvbExecutor.openFdWrite(Uri.parse(raw))
                                     } else {
                                         AvbExecutor.openFdRead(Uri.parse(raw))
@@ -155,13 +161,9 @@ private fun CommandFormMiuix(
     }
 
     CommandScaffold(command, onBack, modifier) {
-        val scrollBehavior = MiuixScrollBehavior()
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .overScrollVertical()
-                .scrollEndHaptic()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {

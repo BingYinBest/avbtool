@@ -5536,8 +5536,9 @@ class AvbTool(object):
 
     sub_parser.set_defaults(func=self.resign_image)
 
-    args = parser.parse_args(argv[1:])
+    args = None
     try:
+      args = parser.parse_args(argv[1:])
       args.func(args)
     except AttributeError:
       # This error gets raised when the command line tool is called without any
@@ -5548,6 +5549,20 @@ class AvbTool(object):
     except AvbError as e:
       sys.stderr.write('{}: {}\n'.format(argv[0], str(e)))
       sys.exit(1)
+    finally:
+      # argparse.FileType opens files that upstream never closes (the CLI
+      # relies on interpreter shutdown to drop them). The embedded runtime
+      # does not exit between runs, so close everything explicitly to avoid
+      # ResourceWarnings and fd leaks. Never close sys.stdout/stderr: some
+      # commands (e.g. info_image --output '-') hand them out via argarse.
+      if args is not None:
+        for _obj in vars(args).values():
+          _close = getattr(_obj, 'close', None)
+          if callable(_close) and _obj is not sys.stdout and _obj is not sys.stderr:
+            try:
+              _close()
+            except Exception:
+              pass
 
   def version(self, _):
     """Implements the 'version' sub-command."""

@@ -75,6 +75,13 @@ internal fun CommandFormMaterial(
     }
 
     val outKeys = setOf("--output", "--output_vbmeta_image", "--vbmeta_image", "--pkmd", "--output_pubkey", "--misc_image")
+    // 就地修改镜像的命令：--image 必须可写（写 footer/truncate 等），
+    // 否则 SAF 只读 fd 上 truncate 会抛 OSError EINVAL。
+    val modifyInPlace = setOf(
+        "erase_footer", "add_hash_footer", "add_hashtree_footer",
+        "resign_image", "resize_image", "zero_hashtree",
+        "append_vbmeta_image", "update_partition_descriptor",
+    )
 
     fun run() {
         AvbExecutor.ensureStarted(context)
@@ -94,7 +101,9 @@ internal fun CommandFormMaterial(
                             argv.add(arg.key)
                             if (arg.type == AvbArgType.FILE) {
                                 if (raw.startsWith("content://")) {
-                                    val fd = if (arg.key in outKeys) {
+                                    val needWrite = arg.key in outKeys ||
+                                        (arg.key == "--image" && command.id in modifyInPlace)
+                                    val fd = if (needWrite) {
                                         AvbExecutor.openFdWrite(Uri.parse(raw))
                                     } else {
                                         AvbExecutor.openFdRead(Uri.parse(raw))

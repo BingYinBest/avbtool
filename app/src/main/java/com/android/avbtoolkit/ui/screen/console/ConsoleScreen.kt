@@ -1,12 +1,12 @@
 package com.android.avbtoolkit.ui.screen.console
 
 import android.view.ViewGroup
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.displayCutout
@@ -14,15 +14,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold as MaterialScaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar as MaterialTopAppBar
@@ -41,8 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import com.android.avbtoolkit.AvbExecutor
 import com.android.avbtoolkit.ui.LocalUiMode
 import com.android.avbtoolkit.ui.UiMode
@@ -57,11 +59,15 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** Shared terminal view factory for both themes. */
-private fun rememberTerminalView(session: AvbTermSession): @Composable () -> Unit = {
+/** Common quick commands shown above the input row in both themes. */
+private val QuickCommands = listOf("version", "info_image", "verify_image", "check_mldsa_support")
+
+@Composable
+private fun TerminalPanel(session: AvbTermSession) {
     val context = LocalContext.current
     AndroidView(
         factory = { ctx ->
@@ -69,6 +75,7 @@ private fun rememberTerminalView(session: AvbTermSession): @Composable () -> Uni
                 setTextSize(12)
                 setBackKeyCharacter(0x7f)
                 isFocusable = false
+                setBackgroundColor(0xFF101014.toInt())
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -190,14 +197,48 @@ private fun ConsoleMiuix(
         contentWindowInsets = WindowInsets.systemBars
             .add(WindowInsets.displayCutout),
     ) { innerPadding ->
-        Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                rememberTerminalView(session)()
-            }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 10.dp),
+        ) {
+            // Quick command chips (Termux-like convenience row).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(top = 6.dp, bottom = 2.dp),
+            ) {
+                QuickCommands.forEach { cmd ->
+                    MiuixTextButton(
+                        text = cmd,
+                        onClick = { session.submitInput(cmd) },
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
+            }
+
+            // Terminal panel: rounded dark surface with monospace output.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(bottom = 6.dp),
+            ) {
+                top.yukonga.miuix.kmp.basic.Card(
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Box(Modifier.fillMaxSize().padding(vertical = 4.dp)) {
+                        TerminalPanel(session)
+                    }
+                }
+            }
+
+            // Command input row.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 EditText(
@@ -209,7 +250,7 @@ private fun ConsoleMiuix(
                 )
                 IconButton(
                     onClick = onSubmit,
-                    modifier = Modifier.padding(start = 4.dp),
+                    modifier = Modifier.padding(start = 6.dp),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
@@ -258,14 +299,46 @@ private fun ConsoleMaterial(
         },
         modifier = modifier,
     ) { innerPadding ->
-        Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                rememberTerminalView(session)()
-            }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 12.dp),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(top = 8.dp, bottom = 4.dp),
+            ) {
+                QuickCommands.forEach { cmd ->
+                    AssistChip(
+                        onClick = { session.submitInput(cmd) },
+                        label = { Text(cmd) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(bottom = 6.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFF101014),
+            ) {
+                Box(Modifier.fillMaxSize().padding(vertical = 4.dp)) {
+                    TerminalPanel(session)
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
