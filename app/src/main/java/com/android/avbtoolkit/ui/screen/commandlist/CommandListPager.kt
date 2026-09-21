@@ -2,6 +2,8 @@ package com.android.avbtoolkit.ui.screen.commandlist
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -126,14 +128,16 @@ private fun CommandListPagerMiuix(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .overScrollVertical()
-                    .padding(bottom = bottomInnerPadding),
+                    .overScrollVertical(),
                 contentPadding = innerPadding,
             ) {
                 items(commands, key = { it.id }) { command ->
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                         CommandCardMiuix(command, onOpenCommand)
                     }
+                }
+                item {
+                    Spacer(Modifier.height(bottomInnerPadding))
                 }
             }
         }
@@ -193,7 +197,7 @@ private fun CommandListPagerMaterial(
         topBar = { TopAppBar(title = { Text(stringResource(category.labelRes)) }) },
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.padding(bottom = bottomInnerPadding),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding,
         ) {
             items(commands, key = { it.id }) { command ->
@@ -239,6 +243,9 @@ private fun CommandListPagerMaterial(
                         }
                     }
                 }
+            }
+            item {
+                Spacer(Modifier.height(bottomInnerPadding))
             }
         }
     }
