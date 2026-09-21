@@ -212,6 +212,11 @@ def run_avbtool(argv):
         out, err = fec_self_test()
         return 0, out, err
 
+    # avbtool.py parses argv[1:], so argv[0] must be the program name.
+    # Normalise whatever the console/GUI passed in.
+    if argv and argv[0] not in ('avbtool', 'avbtool.py'):
+        argv = ['avbtool.py'] + argv
+
     import avbtool
 
     old_stdout, old_stderr = sys.stdout, sys.stderr

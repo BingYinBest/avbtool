@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
@@ -112,6 +113,7 @@ fun LiquidGlassTopBar(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val titleColor = MiuixTheme.colorScheme.onBackground
     Row(
         modifier
             .fillMaxWidth()
@@ -123,11 +125,16 @@ fun LiquidGlassTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = titleColor,
+            )
         }
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
+            color = titleColor,
             maxLines = 1,
             modifier = Modifier.weight(1f),
         )

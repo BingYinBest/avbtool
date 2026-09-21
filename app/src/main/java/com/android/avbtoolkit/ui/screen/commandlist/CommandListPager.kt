@@ -62,6 +62,7 @@ import com.android.avbtoolkit.R
 import com.android.avbtoolkit.ui.LocalUiMode
 import com.android.avbtoolkit.ui.UiMode
 import com.android.avbtoolkit.ui.navigation3.Navigator
+import com.android.avbtoolkit.ui.component.liquid.LiquidGlassBackground
 import com.android.avbtoolkit.ui.navigation3.Route
 import com.android.avbtoolkit.ui.theme.LocalEnableBlur
 import com.android.avbtoolkit.ui.util.BlurredBar
@@ -120,11 +121,14 @@ private fun CommandListPagerMiuix(
             }
         },
         popupHost = { },
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(
             WindowInsetsSides.Horizontal
         ),
     ) { innerPadding ->
-        Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 柔和渐变背景层：悬浮底栏毛玻璃采样时有内容可透，避免整块灰白
+            LiquidGlassBackground()
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
