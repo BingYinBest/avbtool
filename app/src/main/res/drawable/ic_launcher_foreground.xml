@@ -5,22 +5,29 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- AVB shield + key: simple, flat, Miuix-like -->
+    <!-- iOS-style: blue gradient rounded tile + white shield symbol -->
     <group>
-        <!-- shield outline -->
+        <!-- gradient rounded tile (simulated: base + translucent top band) -->
+        <path
+            android:fillColor="#0A84FF"
+            android:pathData="M54,10 C78,10 98,30 98,54 C98,78 78,98 54,98 C30,98 10,78 10,54 C10,30 30,10 54,10 Z" />
+        <path
+            android:fillColor="#666FBFFF"
+            android:pathData="M14,14 C14,24 24,34 34,34 L74,34 C84,34 94,24 94,14 Z" />
+        <!-- white shield -->
         <path
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="7"
+            android:strokeWidth="5"
             android:strokeLineJoin="round"
             android:fillColor="@android:color/transparent"
-            android:pathData="M54,26 L78,35 L78,56 C78,71 68,81 54,87 C40,81 30,71 30,56 L30,35 Z" />
-        <!-- inner check -->
+            android:pathData="M54,32 L72,39 L72,55 C72,67 65,74 54,79 C43,74 36,67 36,55 L36,39 Z" />
+        <!-- check -->
         <path
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="6"
+            android:strokeWidth="4.5"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
             android:fillColor="@android:color/transparent"
-            android:pathData="M46,56 L52,62 L63,49" />
+            android:pathData="M47,55 L52,60 L61,49" />
     </group>
 </vector>

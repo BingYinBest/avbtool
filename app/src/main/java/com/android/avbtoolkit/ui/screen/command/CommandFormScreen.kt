@@ -37,6 +37,8 @@ import com.android.avbtoolkit.AvbCommand
 import com.android.avbtoolkit.AvbExecutor
 import com.android.avbtoolkit.R
 import com.android.avbtoolkit.ui.component.miuix.effect.BgEffectBackground
+import com.android.avbtoolkit.ui.LocalUiMode
+import com.android.avbtoolkit.ui.UiMode
 import com.android.avbtoolkit.ui.component.miuix.EditText
 import com.android.avbtoolkit.ui.theme.LocalEnableBlur
 import com.android.avbtoolkit.ui.util.BlurredBar
@@ -60,12 +62,25 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
- * Miuix-style form for a single avbtool command. Arguments are grouped
- * into preference cards like the Settings screen: file pickers, text
- * fields, dropdowns and switches. Builds argv and runs via [AvbExecutor].
+ * Form for a single avbtool command. Arguments are grouped into cards:
+ * file pickers, text fields, dropdowns and switches. Builds argv and
+ * runs via [AvbExecutor]. Renders Miuix or Material components to match
+ * the active UI mode.
  */
 @Composable
 fun CommandScreen(
+    command: AvbCommand,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> CommandFormMiuix(command, onBack, modifier)
+        UiMode.Material -> CommandFormMaterial(command, onBack, modifier)
+    }
+}
+
+@Composable
+private fun CommandFormMiuix(
     command: AvbCommand,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,

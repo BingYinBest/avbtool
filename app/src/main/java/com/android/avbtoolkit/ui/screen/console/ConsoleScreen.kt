@@ -114,16 +114,34 @@ fun ConsoleScreen(
                     EmulatorView(ctx, session, ctx.resources.displayMetrics).apply {
                         setTextSize(12)
                         setBackKeyCharacter(0x7f)
+                        isFocusable = true
+                        isFocusableInTouchMode = true
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
+                        // EmulatorView consumes touch events (onTouchEvent
+                        // returns true), so setOnClickListener never fires.
+                        // Focus + show the IME on any touch instead.
+                        setOnTouchListener { v, _ ->
+                            v.requestFocus()
+                            val imm = v.context.getSystemService(
+                                android.content.Context.INPUT_METHOD_SERVICE
+                            ) as? android.view.inputmethod.InputMethodManager
+                            imm?.showSoftInput(v, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                            false
+                        }
                     }
                 },
                 update = { view ->
                     if (view.termSession !== session) {
                         view.attachSession(context, session)
                     }
+                    view.requestFocus()
+                    val imm = view.context.getSystemService(
+                        android.content.Context.INPUT_METHOD_SERVICE
+                    ) as? android.view.inputmethod.InputMethodManager
+                    imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
                 },
                 modifier = Modifier.fillMaxSize(),
             )

@@ -40,24 +40,26 @@ object AvbExecutor {
     }
 
     /**
-     * Resolve a SAF uri to a /saf/fd/<fd> path. The caller must hold the
-     * fd open for the duration of the command (see [AcquiredFd]).
+     * Resolve a SAF uri to a /saf/fd/<fd> path (read-only). The caller
+     * must release the fd with [releaseFd] afterwards.
      */
     fun safPathFor(uri: Uri): String {
-        val fd = openFd(uri)
+        val fd = openFdRead(uri)
         return "/saf/fd/$fd"
     }
 
-    /**
-     * Open a SAF content uri for reading (avbtool image/key inputs only
-     * need read access; opening read-write can fail on read-only
-     * providers, which previously surfaced as spurious failures).
-     */
+    // fdsan safety: keep the owning ParcelFileDescriptor and pass its raw
+    // fd to Python. Python os.dup()s it for each open and closes only its
+    // own duplicates; we release by closing the original pfd. adoptFd on
+    // a still-owned fd would abort (fdsan), crashing the app.
+    private val openFds = java.util.concurrent.ConcurrentHashMap<Int, ParcelFileDescriptor>()
+
+    /** Open a SAF content uri for reading. */
     fun openFdRead(uri: Uri): Int {
         val resolver = appContext!!.contentResolver
         val pfd = resolver.openFileDescriptor(uri, "r")
             ?: throw IllegalStateException("cannot open $uri for reading")
-        return pfd.dup().fd
+        return register(pfd)
     }
 
     /** Open a SAF content uri for reading or writing (output files). */
@@ -65,21 +67,18 @@ object AvbExecutor {
         val resolver = appContext!!.contentResolver
         val pfd = resolver.openFileDescriptor(uri, "rw")
             ?: throw IllegalStateException("cannot open $uri for writing")
-        return pfd.dup().fd
+        return register(pfd)
     }
 
-    @Deprecated("use openFdRead/openFdWrite", ReplaceWith("openFdRead(uri)"))
-    fun openFd(uri: Uri): Int = openFdRead(uri)
+    private fun register(pfd: ParcelFileDescriptor): Int {
+        val fd = pfd.fd
+        openFds[fd] = pfd
+        return fd
+    }
 
+    /** Close the pfd that backs [fd]; safe to call multiple times. */
     fun releaseFd(fd: Int) {
-        if (fd >= 0) {
-            try {
-                java.io.FileDescriptor().let { /* no-op */ }
-            } catch (_: Exception) {
-            }
-            val raw = ParcelFileDescriptor.adoptFd(fd)
-            raw.close()
-        }
+        openFds.remove(fd)?.close()
     }
 
     /** A SAF fd kept open until [close] is called. */
