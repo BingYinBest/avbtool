@@ -56,6 +56,17 @@ def init(native_lib_dir):
 # SAF file descriptor bridge
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# SAF fd pseudo-path handling
+# ---------------------------------------------------------------------------
+
+# Every /saf/fd/<n> open() duplicates the fd and returns a fresh file object
+# that avbtool often never closes (it relies on interpreter shutdown, which
+# the embedded runtime never performs). Track them all so we can sweep them
+# up after each run, avoiding ResourceWarnings and fd leaks.
+_saf_open_files = set()
+
+
 class _SafFileWrapper(object):
     """File object wrapper keeping the /saf/fd pseudo-path as .name.
 
@@ -88,7 +99,22 @@ class _SafFileWrapper(object):
         return iter(self._fileobj)
 
     def close(self):
+        _saf_open_files.discard(self)
         self._fileobj.close()
+
+
+def _saf_close_all():
+    """Close every outstanding /saf/fd clone created during the last run."""
+    for fobj in list(_saf_open_files):
+        try:
+            if not fobj.closed:
+                fobj.close()
+        except Exception:
+            pass
+        try:
+            _saf_open_files.discard(fobj)
+        except Exception:
+            pass
 
 
 def install_fd_open_hook():
@@ -119,7 +145,9 @@ def install_fd_open_hook():
                                      encoding=encoding or 'utf-8',
                                      errors=errors or 'strict',
                                      newline=newline)
-                return _SafFileWrapper(path, fobj)
+                wrapper = _SafFileWrapper(path, fobj)
+                _saf_open_files.add(wrapper)
+                return wrapper
         return original_open(path, mode, buffering=buffering, encoding=encoding,
                              errors=errors, newline=newline, closefd=closefd,
                              opener=opener)
@@ -315,6 +343,10 @@ def run_avbtool(argv):
         code = 1
     finally:
         sys.stdout, sys.stderr = old_stdout, old_stderr
+        # avbtool opens /saf/fd/<n> clones it never closes (upstream relies
+        # on interpreter shutdown). The embedded runtime never exits, so
+        # sweep them up here to keep fds and ResourceWarnings in check.
+        _saf_close_all()
     return code, out.getvalue(), err.getvalue()
 
 
