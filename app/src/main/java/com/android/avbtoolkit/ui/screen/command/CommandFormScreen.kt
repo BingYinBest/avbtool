@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -34,22 +36,25 @@ import com.android.avbtoolkit.AvbArgType
 import com.android.avbtoolkit.AvbCommand
 import com.android.avbtoolkit.AvbExecutor
 import com.android.avbtoolkit.R
-import com.android.avbtoolkit.ui.component.liquid.LiquidGlassBackground
-import com.android.avbtoolkit.ui.component.liquid.LiquidGlassTopBar
-import com.android.avbtoolkit.ui.component.liquid.liquidGlassLayer
-import com.android.avbtoolkit.ui.component.liquid.rememberLiquidGlass
+import com.android.avbtoolkit.ui.component.miuix.effect.BgEffectBackground
 import com.android.avbtoolkit.ui.component.miuix.EditText
-import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.android.avbtoolkit.ui.theme.LocalEnableBlur
+import com.android.avbtoolkit.ui.util.BlurredBar
+import com.android.avbtoolkit.ui.util.rememberBlurBackdrop
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
@@ -134,8 +139,7 @@ fun CommandScreen(
         }
     }
 
-    val liquidGlass = rememberLiquidGlass()
-    CommandScaffold(command, onBack, liquidGlass, modifier) {
+    CommandScaffold(command, onBack, modifier) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -344,29 +348,40 @@ private fun ResultCard(exitCode: Int?, stdout: String, stderr: String) {
 private fun CommandScaffold(
     command: AvbCommand,
     onBack: () -> Unit,
-    liquidGlass: LayerBackdrop,
     modifier: Modifier,
     content: @Composable () -> Unit,
 ) {
-    Box(modifier.fillMaxSize()) {
-        Box(Modifier.liquidGlassLayer(liquidGlass).fillMaxSize()) {
-            LiquidGlassBackground()
-        }
-        MiuixScaffold(
-            topBar = {
-                LiquidGlassTopBar(
-                    backdrop = liquidGlass,
+    val scrollBehavior = MiuixScrollBehavior()
+    val enableBlur = LocalEnableBlur.current
+    val backdrop = rememberBlurBackdrop(enableBlur)
+    val barColor = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface
+
+    MiuixScaffold(
+        topBar = {
+            BlurredBar(backdrop) {
+                MiuixTopAppBar(
+                    color = barColor,
                     title = stringResource(command.titleRes),
-                    onBack = onBack,
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = null,
+                                tint = MiuixTheme.colorScheme.onBackground,
+                            )
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
                 )
-            },
-            contentWindowInsets = WindowInsets.systemBars
-                .add(WindowInsets.displayCutout)
-                .only(WindowInsetsSides.Horizontal),
-        ) { innerPadding ->
-            Box(Modifier.padding(innerPadding)) {
-                content()
             }
+        },
+        popupHost = { },
+        contentWindowInsets = WindowInsets.systemBars
+            .add(WindowInsets.displayCutout)
+            .only(WindowInsetsSides.Horizontal),
+    ) { innerPadding ->
+        Box(Modifier.padding(innerPadding)) {
+            content()
         }
     }
 }

@@ -188,7 +188,9 @@ fun FloatingBottomBar(
     val pillShape = remember { CircleShape }
     val accentColor = MiuixTheme.colorScheme.primary
     val surfaceContainer = MiuixTheme.colorScheme.surfaceContainer
-    val containerColor = if (isBlurEnabled) surfaceContainer.copy(0.4f) else surfaceContainer
+    // Slightly more opaque than the template's 0.4 so fast pager switches
+    // don't flash a grey sample while the blur backdrop layer re-renders.
+    val containerColor = if (isBlurEnabled) surfaceContainer.copy(0.55f) else surfaceContainer
 
     val tabsBackdrop = rememberLayerBackdrop()
     val density = LocalDensity.current

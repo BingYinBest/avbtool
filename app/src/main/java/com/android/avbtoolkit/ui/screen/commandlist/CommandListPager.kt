@@ -62,7 +62,6 @@ import com.android.avbtoolkit.R
 import com.android.avbtoolkit.ui.LocalUiMode
 import com.android.avbtoolkit.ui.UiMode
 import com.android.avbtoolkit.ui.navigation3.Navigator
-import com.android.avbtoolkit.ui.component.liquid.LiquidGlassBackground
 import com.android.avbtoolkit.ui.navigation3.Route
 import com.android.avbtoolkit.ui.theme.LocalEnableBlur
 import com.android.avbtoolkit.ui.util.BlurredBar
@@ -88,7 +87,6 @@ fun CommandListPager(
     category: AvbCategory,
     isCurrentPage: Boolean,
 ) {
-    if (!isCurrentPage) return
     val commands = remember(category) { AvbCatalog.forCategory(category) }
     val onOpenCommand: (String) -> Unit = { id -> navigator.push(Route.Command(id)) }
 
@@ -121,14 +119,11 @@ private fun CommandListPagerMiuix(
             }
         },
         popupHost = { },
-        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(
             WindowInsetsSides.Horizontal
         ),
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            // 柔和渐变背景层：悬浮底栏毛玻璃采样时有内容可透，避免整块灰白
-            LiquidGlassBackground()
+        Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -165,7 +160,7 @@ private fun CommandCardMiuix(command: AvbCommand, onOpenCommand: (String) -> Uni
                 imageVector = commandIcon(command.id),
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = MiuixTheme.colorScheme.primary,
+                tint = MiuixTheme.colorScheme.onBackground,
             )
             Column(
                 Modifier

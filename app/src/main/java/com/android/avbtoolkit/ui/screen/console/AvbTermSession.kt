@@ -24,8 +24,10 @@ class AvbTermSession(
         // and a writer thread that flushes to mTermOut. We neither pipe a
         // subprocess nor write through mTermOut (output goes through
         // write()/appendToEmulator), so both streams are neutralised with
-        // dummies to keep the threads from NPE-ing.
-        setTermIn(java.io.ByteArrayInputStream(ByteArray(0)))
+        // dummies to keep the threads from NPE-ing. PipedInputStream
+        // blocks forever instead of returning EOF, so the reader thread
+        // stays alive and the writer keeps draining the output queue.
+        setTermIn(java.io.PipedInputStream())
         setTermOut(object : java.io.OutputStream() {
             override fun write(b: Int) {}
             override fun write(b: ByteArray, off: Int, len: Int) {}
