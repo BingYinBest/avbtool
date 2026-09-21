@@ -447,7 +447,5 @@ object AvbCatalog {
         "SHA256_ECDSA_P384",
         "SHA512_ECDSA_P256",
         "SHA512_ECDSA_P384",
-        "MLDSA65",
-        "MLDSA87",
     )
 }

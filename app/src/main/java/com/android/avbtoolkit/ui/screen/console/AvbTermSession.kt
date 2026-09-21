@@ -49,6 +49,25 @@ class AvbTermSession(
         notifyUpdate()
     }
 
+    /**
+     * Submit a full command line from the GUI input box, bypassing the
+     * per-keystroke emulator feed. Echoes the line and dispatches it like
+     * a keyboard Enter would.
+     */
+    fun submitInput(text: String) {
+        if (!emulatorReady) return
+        val value = text.trim()
+        appendOutput("$value\r\n")
+        if (value.isNotEmpty()) {
+            history.add(value)
+            if (history.size > 50) history.removeAt(0)
+            dispatch(value)
+        } else {
+            writePrompt()
+        }
+        notifyUpdate()
+    }
+
     fun appendOutput(text: String) {
         val normalized = text.replace("\n", "\r\n")
         val bytes = normalized.toByteArray(Charsets.UTF_8)

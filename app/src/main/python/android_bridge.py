@@ -176,6 +176,88 @@ def rsa_verify(num_bits, modulus, sig_blob, expected):
 
 
 # ---------------------------------------------------------------------------
+# ML-DSA (FIPS 204) via pure-Python dilithium-py
+# ---------------------------------------------------------------------------
+
+def mldsa_available():
+    """Whether the bundled pure-Python ML-DSA implementation is usable."""
+    try:
+        import dilithium_py  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+_MLDSA_ALGS = {'MLDSA65': None, 'MLDSA87': None}
+
+
+def _mldsa_alg_from_name(alg_name):
+    from dilithium_py.ml_dsa import ML_DSA_65, ML_DSA_87
+    _MLDSA_ALGS['MLDSA65'] = ML_DSA_65
+    _MLDSA_ALGS['MLDSA87'] = ML_DSA_87
+    return _MLDSA_ALGS.get(alg_name)
+
+
+def _mldsa_alg_from_bytes(pub):
+    from dilithium_py.ml_dsa import ML_DSA_65, ML_DSA_87
+    if len(pub) == ML_DSA_65._pk_size():
+        return 'MLDSA65', ML_DSA_65
+    if len(pub) == ML_DSA_87._pk_size():
+        return 'MLDSA87', ML_DSA_87
+    raise ValueError('unrecognised ML-DSA public key size %d' % len(pub))
+
+
+def mldsa_load(key_path):
+    """Load an ML-DSA key; returns (alg_name, pub, sk_or_None).
+
+    Accepts PKCS#8 private keys and SubjectPublicKeyInfo public keys in
+    PEM form (both as produced by openssl 3.5+ `genpkey -algorithm
+    ML-DSA-*`), matching what upstream avbtool reads.
+    """
+    from dilithium_py.ml_dsa import pkcs
+
+    with open(key_path, 'rb') as f:
+        data = f.read()
+
+    # Try private key first (PKCS#8 PEM).
+    try:
+        text = data.decode('utf-8')
+    except UnicodeDecodeError:
+        text = None
+    if text is not None:
+        try:
+            (ml_dsa, sk, _seed, pk) = pkcs.sk_from_pem(text)
+            for name in ('MLDSA65', 'MLDSA87'):
+                if _mldsa_alg_from_name(name) is ml_dsa:
+                    return name, pk, sk
+        except Exception:
+            pass
+        try:
+            (ml_dsa, pk) = pkcs.pk_from_pem(text)
+            for name in ('MLDSA65', 'MLDSA87'):
+                if _mldsa_alg_from_name(name) is ml_dsa:
+                    return name, pk, None
+        except Exception:
+            pass
+    raise ValueError('not a recognised ML-DSA PEM key: ' + key_path)
+
+
+def mldsa_sign(sk, data_to_sign):
+    """Sign |data_to_sign| with an ML-DSA private key (FIPS 204 pure)."""
+    from dilithium_py.ml_dsa import ML_DSA_65, ML_DSA_87
+    for cls in (ML_DSA_65, ML_DSA_87):
+        if len(sk) == cls._sk_size():
+            return cls.sign(sk, data_to_sign)
+    raise ValueError('unrecognised ML-DSA private key size %d' % len(sk))
+
+
+def mldsa_verify(pub, data, signature):
+    """Verify an ML-DSA signature over |data| with a raw public key."""
+    _alg, cls = _mldsa_alg_from_bytes(pub)
+    return cls.verify(pub, data, signature)
+
+
+# ---------------------------------------------------------------------------
 # Native FEC
 # ---------------------------------------------------------------------------
 

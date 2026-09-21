@@ -138,6 +138,11 @@ chaquopy {
         buildPython(chaquopyPythonPath)
         pip {
             install("cryptography==42.0.8")
+            // Pure-Python ML-DSA (FIPS 204); replaces openssl 3.5+ for
+            // the MLDSA65/87 signing algorithms. ecdsa is a dependency
+            // of dilithium-py's PKCS#8/SPKI key parsing.
+            install("dilithium-py==1.4.0")
+            install("ecdsa==0.19.2")
         }
     }
 }

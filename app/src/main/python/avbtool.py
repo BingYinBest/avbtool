@@ -631,38 +631,31 @@ class MLDSAPublicKey(object):
   _IS_SUPPORTED = None
 
   def is_supported():
-    """Checks if the system openssl supports ML-DSA."""
+    """Checks if ML-DSA is supported by the bundled pure-Python runtime.
+
+    Unlike upstream (which probes the system openssl for ML-DSA), the
+    Android build always ships the pure-Python ML-DSA implementation
+    through android_bridge, so ML-DSA is available unconditionally.
+    """
     if MLDSAPublicKey._IS_SUPPORTED is None:
-      try:
-        # Use -public-key-algorithms to list supported algorithms
-        p = subprocess.Popen([AVB_OPENSSL, 'list', '-public-key-algorithms'],
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        pout, _ = p.communicate()
-        if p.returncode != 0:
-          MLDSAPublicKey._IS_SUPPORTED = False
-        else:
-          # Check for 'mldsa' (case-insensitive) in the output.
-          # OpenSSL 3.5+ with ML-DSA support should list these.
-          MLDSAPublicKey._IS_SUPPORTED = b'mldsa' in pout.lower()
-      except OSError:
-        # If openssl is missing or fails to execute
-        MLDSAPublicKey._IS_SUPPORTED = False
+      MLDSAPublicKey._IS_SUPPORTED = _ab.mldsa_available()
     return MLDSAPublicKey._IS_SUPPORTED
 
-  def __init__(self, key_path, pub, delete_key=False):
+  def __init__(self, key_path, pub, delete_key=False, sk=None):
     """Initializes a new ML-DSA public key.
 
     Arguments:
       key_path: The path to a key file.
       pub: The public key bytes.
       delete_key: Whether to delete the key file when exiting the context.
+      sk: Optional signing key bytes (used by sign()).
     """
     if not MLDSAPublicKey.is_supported():
-      raise AvbError('ML-DSA is not supported by the system openssl.')
+      raise AvbError('ML-DSA is not supported by this runtime.')
     self.key_path = key_path
     self.pub = pub
     self.delete_key = delete_key
+    self.sk = sk
 
   def __enter__(self):
     return self
@@ -674,6 +667,9 @@ class MLDSAPublicKey(object):
   def load(key_path):
     """Loads and parses an ML-DSA key from either a private or public key file.
 
+    Uses the bundled pure-Python ML-DSA implementation (PKCS#8/SPKI PEM)
+    instead of shelling out to openssl.
+
     Arguments:
       key_path: The path to a key file.
 
@@ -681,62 +677,23 @@ class MLDSAPublicKey(object):
       AvbError: If ML-DSA key parameters could not be read from file.
     """
     if not MLDSAPublicKey.is_supported():
-      raise AvbError('ML-DSA is not supported by the system openssl.')
+      raise AvbError('ML-DSA is not supported by this runtime.')
 
-    args = [AVB_OPENSSL, 'pkey', '-in', key_path, '-pubin', '-text', '-noout']
-    p = subprocess.Popen(args,
-                         stdin=subprocess.PIPE,
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
-    (pout, perr) = p.communicate()
-    if p.wait() != 0:
-      raise AvbError('Error getting ML-DSA public key: {}'.format(perr))
-
-    pout_lower = pout.lower()
-    if not (pout_lower.startswith(MLDSAPublicKey.MLDSA65_PUBLIC_KEY_TYPE_LABEL) or
-            pout_lower.startswith(MLDSAPublicKey.MLDSA87_PUBLIC_KEY_TYPE_LABEL)):
-      raise AvbError('Unexpected key type, not ML-DSA: {}'.format(key_path))
-
-
-    encoded_pub_hexstr = pout.decode('utf-8').split('\n', 2)[2]
-    pub_hexster = ''.join(encoded_pub_hexstr.split()).replace(':', '')
-    pub = bytes.fromhex(pub_hexster)
-    return MLDSAPublicKey(key_path, pub)
+    try:
+      (alg_name, pub, sk) = _ab.mldsa_load(key_path)
+    except Exception as e:
+      raise AvbError('Error getting ML-DSA public key: {}'.format(e))
+    return MLDSAPublicKey(key_path, pub, sk=sk)
 
   def decode(alg_name, pubkey_blob):
-    """Decodes the public ML-DSA key in |AvbMLDSAPublicKeyHeader| format."""
+    """Decodes the public ML-DSA key in |AvbMLDSAPublicKeyHeader| format.
+
+    The blob is a 4-byte big-endian length followed by the raw FIPS 204
+    public key bytes (rho || t1); no DER wrapping is needed here.
+    """
     (num_bytes,) = struct.unpack('!I', pubkey_blob[0:4])
     pub = pubkey_blob[4:4 + num_bytes]
-
-    if alg_name == 'MLDSA65':
-      oid = 'id-ml-dsa-65'
-    elif alg_name == 'MLDSA87':
-      oid = 'id-ml-dsa-87'
-    else:
-      raise AvbError('Unsupported ML-DSA algorithm: {}'.format(alg_name))
-
-
-    asn1_str = ('asn1=SEQUENCE:pubkeyinfo\n'
-                '\n'
-                '[pubkeyinfo]\n'
-                'algorithm=SEQUENCE:mldsa_alg\n'
-                'pubkey=FORMAT:HEX,BITSTRING:{}\n'
-                '\n'
-                '[mldsa_alg]\n'
-                'algorithm=OID:{}\n').format(pub.hex(), oid)
-    with tempfile.NamedTemporaryFile() as asn1_tmpfile:
-      asn1_tmpfile.write(asn1_str.encode('ascii'))
-      asn1_tmpfile.flush()
-
-      with tempfile.NamedTemporaryFile(delete=False) as der_tmpfile:
-        p = subprocess.Popen(
-            [AVB_OPENSSL, 'asn1parse', '-genconf', asn1_tmpfile.name, '-out',
-            der_tmpfile.name, '-noout'])
-        retcode = p.wait()
-        if retcode != 0:
-          os.remove(der_tmpfile.name)
-          raise AvbError('Error generating DER file for ML-DSA key')
-    return MLDSAPublicKey(der_tmpfile.name, pub, delete_key=True)
+    return MLDSAPublicKey(None, pub)
 
   def encode(self):
     """Encodes the public ML-DSA key in |AvbMLDSAPublicKeyHeader| format.
@@ -810,27 +767,9 @@ class MLDSAPublicKey(object):
           signing_file.seek(0)
           signature = signing_file.read()
         else:
-          p = subprocess.Popen(
-              [
-                  AVB_OPENSSL,
-                  'pkeyutl',
-                  '-sign',
-                  '-inkey',
-                  self.key_path,
-                  '-in',
-                  signing_file.name,
-                  '-pkeyopt',
-                  'deterministic:1',
-              ],
-              stdin=subprocess.PIPE,
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-          )
-          (pout, perr) = p.communicate()
-          retcode = p.wait()
-          if retcode != 0:
-            raise AvbError('Error signing with ML-DSA key: {}'.format(perr))
-          signature = pout
+          if self.sk is None:
+            raise AvbError('ML-DSA signing key is not available')
+          signature = _ab.mldsa_sign(self.sk, data_to_sign)
     if len(signature) != algorithm.signature_num_bytes:
       raise AvbError('Error signing: Invalid length of signature')
     return signature
@@ -850,26 +789,7 @@ class MLDSAPublicKey(object):
                              algorithm_name))
 
     # Verifies the signature.
-    with tempfile.NamedTemporaryFile() as sig_tmpfile:
-      sig_tmpfile.write(signature_to_verify)
-      sig_tmpfile.flush()
-
-      with tempfile.NamedTemporaryFile() as data_tmpfile:
-        data_tmpfile.write(data)
-        data_tmpfile.flush()
-
-        p = subprocess.Popen(
-            [AVB_OPENSSL, 'pkeyutl', '-verify', '-pubin', '-inkey', self.key_path,
-            '-sigfile', sig_tmpfile.name, '-in', data_tmpfile.name],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        (pout, perr) = p.communicate()
-        retcode = p.wait()
-        if retcode != 0:
-          return False
-    return True
+    return _ab.mldsa_verify(self.pub, data, signature_to_verify)
 
 def load_public_key(key_path):
   """Loads and parses an key from either a private or public key file.
@@ -884,19 +804,11 @@ def load_public_key(key_path):
     Exception: If the key could not be loaded from the file.
   """
 
-  # Attempt 1: Check if it's an RSA key (private key format)
-  args = [AVB_OPENSSL, 'rsa', '-in', key_path, '-noout']
-  p1 = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  p1.communicate()
-  if p1.wait() == 0:
+  # Attempt 1: Check if it's an RSA key (uses cryptography, no openssl)
+  try:
       return RSAPublicKey.load(key_path)
-
-  # Attempt 2: Check if it's an RSA key (public key format)
-  args.append('-pubin')
-  p2 = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  p2.communicate()
-  if p2.wait() == 0:
-      return RSAPublicKey.load(key_path)
+  except Exception:
+      pass
 
   # If both RSA attempts fail, assume it's ML-DSA
   return MLDSAPublicKey.load(key_path)

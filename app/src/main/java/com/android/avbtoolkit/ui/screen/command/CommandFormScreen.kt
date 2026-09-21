@@ -96,23 +96,7 @@ private fun CommandFormMiuix(
     var stdout by remember { mutableStateOf("") }
     var stderr by remember { mutableStateOf("") }
     var exitCode by remember { mutableStateOf<Int?>(null) }
-    var pendingFileArg by remember { mutableStateOf<AvbArg?>(null) }
-
-    val openFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            pendingFileArg?.let { arg ->
-                values = values + (arg.key to uri.toString())
-                pendingFileArg = null
-            }
-        }
-    }
-
-    fun pickFile(arg: AvbArg) {
-        pendingFileArg = arg
-        openFile.launch(arrayOf("*/*"))
-    }
+    var editingArg by remember { mutableStateOf<AvbArg?>(null) }
 
     fun releaseFds() {
         fdToPathCache.values.forEach { AvbExecutor.releaseFd(it) }
@@ -121,6 +105,10 @@ private fun CommandFormMiuix(
 
     // 输出类文件参数：需要 rw 打开
     val outKeys = setOf("--output", "--output_vbmeta_image", "--vbmeta_image", "--pkmd", "--output_pubkey", "--misc_image")
+
+    // 输入类参数：值可能是 SAF content:// uri，也可能是用户手填的路径
+    // （如 /data/local/tmp/boot.img）。手填路径时直接传给 avbtool，由
+    // Python 侧读写；content:// 则通过 SAF fd 伪路径访问。
     fun run() {
         AvbExecutor.ensureStarted(context)
         running = true
@@ -138,13 +126,17 @@ private fun CommandFormMiuix(
                         else -> if (raw.isNotBlank()) {
                             argv.add(arg.key)
                             if (arg.type == AvbArgType.FILE) {
-                                val fd = if (arg.key in outKeys) {
-                                    AvbExecutor.openFdWrite(Uri.parse(raw))
+                                if (raw.startsWith("content://")) {
+                                    val fd = if (arg.key in outKeys) {
+                                        AvbExecutor.openFdWrite(Uri.parse(raw))
+                                    } else {
+                                        AvbExecutor.openFdRead(Uri.parse(raw))
+                                    }
+                                    fdToPathCache[arg.key] = fd
+                                    argv.add("/saf/fd/$fd")
                                 } else {
-                                    AvbExecutor.openFdRead(Uri.parse(raw))
+                                    argv.add(raw)
                                 }
-                                fdToPathCache[arg.key] = fd
-                                argv.add("/saf/fd/$fd")
                             } else {
                                 argv.add(raw)
                             }
@@ -204,7 +196,7 @@ private fun CommandFormMiuix(
                                     AvbArgType.FILE -> FilePreference(
                                         arg = arg,
                                         value = values[arg.key].orEmpty(),
-                                        onPick = { pickFile(arg) },
+                                        onEdit = { editingArg = arg },
                                     )
                                     else -> EditText(
                                         title = arg.key,
@@ -297,6 +289,20 @@ private fun CommandFormMiuix(
                 }
             }
         }
+
+        // FILE 参数编辑弹窗（手填路径 / 选文件 / 选目录+文件名）
+        editingArg?.let { arg ->
+            ArgPathDialog(
+                title = arg.key,
+                isOutput = arg.key in outKeys,
+                initialValue = values[arg.key].orEmpty(),
+                onConfirm = { v ->
+                    values = values + (arg.key to v)
+                    editingArg = null
+                },
+                onDismiss = { editingArg = null },
+            )
+        }
     }
 }
 
@@ -314,14 +320,14 @@ private fun GroupTitle(@androidx.annotation.StringRes res: Int) {
 private fun FilePreference(
     arg: AvbArg,
     value: String,
-    onPick: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     ArrowPreference(
         title = arg.key,
         summary = if (value.isBlank()) {
             stringResource(R.string.command_choose_file)
         } else {
-            value.substringAfterLast('/')
+            resolveDisplayName(LocalContext.current, value)
         },
         startAction = {
             Icon(
@@ -331,7 +337,7 @@ private fun FilePreference(
                 tint = MiuixTheme.colorScheme.onBackground,
             )
         },
-        onClick = onPick,
+        onClick = onEdit,
     )
 }
 
@@ -403,10 +409,9 @@ private fun CommandScaffold(
         },
         popupHost = { },
         contentWindowInsets = WindowInsets.systemBars
-            .add(WindowInsets.displayCutout)
-            .only(WindowInsetsSides.Horizontal),
+            .add(WindowInsets.displayCutout),
     ) { innerPadding ->
-        Box(Modifier.padding(innerPadding)) {
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
             content()
         }
     }

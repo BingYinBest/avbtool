@@ -67,23 +67,7 @@ internal fun CommandFormMaterial(
     var stdout by remember { mutableStateOf("") }
     var stderr by remember { mutableStateOf("") }
     var exitCode by remember { mutableStateOf<Int?>(null) }
-    var pendingFileArg by remember { mutableStateOf<AvbArg?>(null) }
-
-    val openFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            pendingFileArg?.let { arg ->
-                values = values + (arg.key to uri.toString())
-                pendingFileArg = null
-            }
-        }
-    }
-
-    fun pickFile(arg: AvbArg) {
-        pendingFileArg = arg
-        openFile.launch(arrayOf("*/*"))
-    }
+    var editingArg by remember { mutableStateOf<AvbArg?>(null) }
 
     fun releaseFds() {
         fdToPathCache.values.forEach { AvbExecutor.releaseFd(it) }
@@ -109,13 +93,17 @@ internal fun CommandFormMaterial(
                         else -> if (raw.isNotBlank()) {
                             argv.add(arg.key)
                             if (arg.type == AvbArgType.FILE) {
-                                val fd = if (arg.key in outKeys) {
-                                    AvbExecutor.openFdWrite(Uri.parse(raw))
+                                if (raw.startsWith("content://")) {
+                                    val fd = if (arg.key in outKeys) {
+                                        AvbExecutor.openFdWrite(Uri.parse(raw))
+                                    } else {
+                                        AvbExecutor.openFdRead(Uri.parse(raw))
+                                    }
+                                    fdToPathCache[arg.key] = fd
+                                    argv.add("/saf/fd/$fd")
                                 } else {
-                                    AvbExecutor.openFdRead(Uri.parse(raw))
+                                    argv.add(raw)
                                 }
-                                fdToPathCache[arg.key] = fd
-                                argv.add("/saf/fd/$fd")
                             } else {
                                 argv.add(raw)
                             }
@@ -191,7 +179,7 @@ internal fun CommandFormMaterial(
                                     AvbArgType.FILE -> MaterialFileField(
                                         arg = arg,
                                         value = values[arg.key].orEmpty(),
-                                        onPick = { pickFile(arg) },
+                                        onEdit = { editingArg = arg },
                                     )
                                     else -> OutlinedTextField(
                                         value = values[arg.key].orEmpty(),
@@ -327,6 +315,20 @@ internal fun CommandFormMaterial(
                 }
             }
         }
+
+        // FILE 参数编辑弹窗（手填路径 / 选文件 / 选目录+文件名）
+        editingArg?.let { arg ->
+            ArgPathDialog(
+                title = arg.key,
+                isOutput = arg.key in outKeys,
+                initialValue = values[arg.key].orEmpty(),
+                onConfirm = { v ->
+                    values = values + (arg.key to v)
+                    editingArg = null
+                },
+                onDismiss = { editingArg = null },
+            )
+        }
     }
 }
 
@@ -383,20 +385,21 @@ private fun MaterialDropdownField(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MaterialFileField(
     arg: AvbArg,
     value: String,
-    onPick: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     OutlinedTextField(
-        value = value.substringAfterLast('/'),
+        value = if (value.isBlank()) "" else resolveDisplayName(LocalContext.current, value),
         onValueChange = {},
         readOnly = true,
         label = { Text(arg.key) },
         placeholder = { Text(stringResource(R.string.command_choose_file)) },
         trailingIcon = {
-            androidx.compose.material3.TextButton(onClick = onPick) {
+            androidx.compose.material3.TextButton(onClick = onEdit) {
                 Text(stringResource(R.string.command_choose_file))
             }
         },
