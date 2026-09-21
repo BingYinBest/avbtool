@@ -41,7 +41,7 @@ import android_bridge as _ab
 
 # Keep in sync with libavb/avb_version.h.
 AVB_VERSION_MAJOR = 1
-AVB_VERSION_MINOR = 3
+AVB_VERSION_MINOR = 4
 AVB_VERSION_SUB = 0
 
 # Keep in sync with libavb/avb_footer.h.
@@ -53,6 +53,23 @@ AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED = 2
 
 # Configuration for enabling logging of calls to avbtool.
 AVB_INVOCATION_LOGFILE = os.environ.get('AVB_INVOCATION_LOGFILE')
+
+
+def _get_openssl_binary():
+  """Returns the path to the OpenSSL binary to use.
+
+  If available, use the 'avb_openssl' binary located in the same directory as
+  this tool. Otherwise, fall back to 'openssl' from the system's PATH.
+  """
+  executable_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+  hermetic_openssl = os.path.join(executable_dir, 'avb_openssl')
+  if os.path.exists(hermetic_openssl):
+    return hermetic_openssl
+
+  return 'openssl'
+
+
+AVB_OPENSSL = _get_openssl_binary()
 
 # Known values for certificate "usage" field. These values must match the
 # libavb_cert implementation.
@@ -203,6 +220,20 @@ ALGORITHMS = {
                 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05,
                 0x00, 0x04, 0x40
             ]))),
+    'MLDSA65': Algorithm(
+        algorithm_type=7,        # AVB_ALGORITHM_TYPE_MLDSA65
+        hash_name='',
+        hash_num_bytes=0,
+        signature_num_bytes=3309,
+        public_key_num_bytes=4 + 1952,
+        padding=b''),
+    'MLDSA87': Algorithm(
+        algorithm_type=8,        # AVB_ALGORITHM_TYPE_MLDSA87
+        hash_name='',
+        hash_num_bytes=0,
+        signature_num_bytes=4627,
+        public_key_num_bytes=4 + 2592,
+        padding=b''),
 }
 
 
@@ -446,12 +477,12 @@ class RSAPublicKey(object):
 
       with tempfile.NamedTemporaryFile(delete=False) as der_tmpfile:
         p = subprocess.Popen(
-            ['openssl', 'asn1parse', '-genconf', asn1_tmpfile.name, '-out',
+            [AVB_OPENSSL, 'asn1parse', '-genconf', asn1_tmpfile.name, '-out',
             der_tmpfile.name, '-noout'])
         retcode = p.wait()
         if retcode != 0:
           os.remove(der_tmpfile.name)
-          raise AvbError('Error generating DER file')
+          raise AvbError('Error generating DER file for RSA key')
     return RSAPublicKey(der_tmpfile.name, modulus, num_bits, delete_key=True)
 
   def encode(self):
@@ -501,7 +532,7 @@ class RSAPublicKey(object):
                      .format(algorithm_name))
 
     if self.num_bits != (algorithm.signature_num_bytes * 8):
-      raise AvbError('Key size of key ({} bits) does not match key size '
+      raise AvbError('RSA Key size of key ({} bits) does not match key size '
                      '({} bits) of given algorithm {}.'
                      .format(self.num_bits, algorithm.signature_num_bytes * 8,
                              algorithm_name))
@@ -522,7 +553,7 @@ class RSAPublicKey(object):
                               self.key_path, signing_file.name])
         retcode = p.wait()
         if retcode != 0:
-          raise AvbError('Error signing')
+          raise AvbError('Error signing with RSA key')
         signing_file.seek(0)
         signature = signing_file.read()
     else:
@@ -561,7 +592,7 @@ class RSAPublicKey(object):
                      .format(algorithm_name))
 
     if self.num_bits != (algorithm.signature_num_bytes * 8):
-      raise AvbError('Key size of key ({} bits) does not match key size '
+      raise AvbError('RSA Key size of key ({} bits) does not match key size '
                      '({} bits) of given algorithm {}.'
                      .format(self.num_bits, algorithm.signature_num_bytes * 8,
                              algorithm_name))
@@ -584,6 +615,309 @@ class RSAPublicKey(object):
       return False
     return True
 
+
+class MLDSAPublicKey(object):
+  """Data structure used for a ML-DSA public key.
+
+  Attributes:
+    pub: The public key bytes.
+    key_path: The path to a key file.
+    delete_key: Whether to delete the key file when exiting the context.
+  """
+
+  MLDSA65_PUBLIC_KEY_TYPE_LABEL = b'ml-dsa-65 public-key:'
+  MLDSA87_PUBLIC_KEY_TYPE_LABEL = b'ml-dsa-87 public-key:'
+
+  _IS_SUPPORTED = None
+
+  def is_supported():
+    """Checks if the system openssl supports ML-DSA."""
+    if MLDSAPublicKey._IS_SUPPORTED is None:
+      try:
+        # Use -public-key-algorithms to list supported algorithms
+        p = subprocess.Popen([AVB_OPENSSL, 'list', '-public-key-algorithms'],
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        pout, _ = p.communicate()
+        if p.returncode != 0:
+          MLDSAPublicKey._IS_SUPPORTED = False
+        else:
+          # Check for 'mldsa' (case-insensitive) in the output.
+          # OpenSSL 3.5+ with ML-DSA support should list these.
+          MLDSAPublicKey._IS_SUPPORTED = b'mldsa' in pout.lower()
+      except OSError:
+        # If openssl is missing or fails to execute
+        MLDSAPublicKey._IS_SUPPORTED = False
+    return MLDSAPublicKey._IS_SUPPORTED
+
+  def __init__(self, key_path, pub, delete_key=False):
+    """Initializes a new ML-DSA public key.
+
+    Arguments:
+      key_path: The path to a key file.
+      pub: The public key bytes.
+      delete_key: Whether to delete the key file when exiting the context.
+    """
+    if not MLDSAPublicKey.is_supported():
+      raise AvbError('ML-DSA is not supported by the system openssl.')
+    self.key_path = key_path
+    self.pub = pub
+    self.delete_key = delete_key
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    if self.delete_key:
+      os.remove(self.key_path)
+
+  def load(key_path):
+    """Loads and parses an ML-DSA key from either a private or public key file.
+
+    Arguments:
+      key_path: The path to a key file.
+
+    Raises:
+      AvbError: If ML-DSA key parameters could not be read from file.
+    """
+    if not MLDSAPublicKey.is_supported():
+      raise AvbError('ML-DSA is not supported by the system openssl.')
+
+    args = [AVB_OPENSSL, 'pkey', '-in', key_path, '-pubin', '-text', '-noout']
+    p = subprocess.Popen(args,
+                         stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+    (pout, perr) = p.communicate()
+    if p.wait() != 0:
+      raise AvbError('Error getting ML-DSA public key: {}'.format(perr))
+
+    pout_lower = pout.lower()
+    if not (pout_lower.startswith(MLDSAPublicKey.MLDSA65_PUBLIC_KEY_TYPE_LABEL) or
+            pout_lower.startswith(MLDSAPublicKey.MLDSA87_PUBLIC_KEY_TYPE_LABEL)):
+      raise AvbError('Unexpected key type, not ML-DSA: {}'.format(key_path))
+
+
+    encoded_pub_hexstr = pout.decode('utf-8').split('\n', 2)[2]
+    pub_hexster = ''.join(encoded_pub_hexstr.split()).replace(':', '')
+    pub = bytes.fromhex(pub_hexster)
+    return MLDSAPublicKey(key_path, pub)
+
+  def decode(alg_name, pubkey_blob):
+    """Decodes the public ML-DSA key in |AvbMLDSAPublicKeyHeader| format."""
+    (num_bytes,) = struct.unpack('!I', pubkey_blob[0:4])
+    pub = pubkey_blob[4:4 + num_bytes]
+
+    if alg_name == 'MLDSA65':
+      oid = 'id-ml-dsa-65'
+    elif alg_name == 'MLDSA87':
+      oid = 'id-ml-dsa-87'
+    else:
+      raise AvbError('Unsupported ML-DSA algorithm: {}'.format(alg_name))
+
+
+    asn1_str = ('asn1=SEQUENCE:pubkeyinfo\n'
+                '\n'
+                '[pubkeyinfo]\n'
+                'algorithm=SEQUENCE:mldsa_alg\n'
+                'pubkey=FORMAT:HEX,BITSTRING:{}\n'
+                '\n'
+                '[mldsa_alg]\n'
+                'algorithm=OID:{}\n').format(pub.hex(), oid)
+    with tempfile.NamedTemporaryFile() as asn1_tmpfile:
+      asn1_tmpfile.write(asn1_str.encode('ascii'))
+      asn1_tmpfile.flush()
+
+      with tempfile.NamedTemporaryFile(delete=False) as der_tmpfile:
+        p = subprocess.Popen(
+            [AVB_OPENSSL, 'asn1parse', '-genconf', asn1_tmpfile.name, '-out',
+            der_tmpfile.name, '-noout'])
+        retcode = p.wait()
+        if retcode != 0:
+          os.remove(der_tmpfile.name)
+          raise AvbError('Error generating DER file for ML-DSA key')
+    return MLDSAPublicKey(der_tmpfile.name, pub, delete_key=True)
+
+  def encode(self):
+    """Encodes the public ML-DSA key in |AvbMLDSAPublicKeyHeader| format.
+
+    This creates a |AvbMLDSAPublicKeyHeader| as well as the public key bytes
+    following it.
+
+    Returns:
+      The |AvbMLDSAPublicKeyHeader| followed by the public key bytes.
+    """
+    ret = bytearray()
+    ret.extend(struct.pack('!I', len(self.pub)))
+    ret.extend(self.pub)
+    return bytes(ret)
+
+  def sign(self, algorithm_name, data_to_sign, signing_helper=None,
+           signing_helper_with_files=None):
+    """Sign given data using |signing_helper| or openssl.
+
+    openssl is used if neither the parameters signing_helper nor
+    signing_helper_with_files are given.
+
+    Arguments:
+      algorithm_name: The algorithm name as per the ALGORITHMS dict.
+      data_to_sign: Data to sign as bytes or bytearray.
+      signing_helper: Program which signs a hash and returns the signature.
+      signing_helper_with_files: Same as signing_helper but uses files instead.
+
+    Returns:
+      The signature as bytes.
+
+    Raises:
+      AvbError: If an error occurred during signing.
+    """
+    # Checks requested algorithm for validity.
+    algorithm = ALGORITHMS.get(algorithm_name)
+    if not algorithm:
+      raise AvbError('Algorithm with name {} is not supported.'
+                     .format(algorithm_name))
+
+    if len(self.pub) != algorithm.public_key_num_bytes - 4:
+      raise AvbError('ML-DSA Key size of key ({} bytes) does not match key size '
+                     '({} bytes) of given algorithm {}.'
+                     .format(len(self.pub),
+                             algorithm.public_key_num_bytes - 4,
+                             algorithm_name))
+
+    # Calculates the signature.
+    p = None
+    if signing_helper is not None:
+      p = subprocess.Popen(
+          [signing_helper, algorithm_name, self.key_path],
+          stdin=subprocess.PIPE,
+          stdout=subprocess.PIPE,
+          stderr=subprocess.PIPE)
+      (pout, perr) = p.communicate(data_to_sign)
+      retcode = p.wait()
+      if retcode != 0:
+        raise AvbError('Error signing with ML-DSA key: {}'.format(perr))
+      signature = pout
+    else:
+      with tempfile.NamedTemporaryFile() as signing_file:
+        signing_file.write(data_to_sign)
+        signing_file.flush()
+        if signing_helper_with_files is not None:
+          p = subprocess.Popen([signing_helper_with_files, algorithm_name,
+                                self.key_path, signing_file.name])
+          retcode = p.wait()
+          if retcode != 0:
+            raise AvbError('Error signing with ML-DSA key')
+          signing_file.seek(0)
+          signature = signing_file.read()
+        else:
+          p = subprocess.Popen(
+              [
+                  AVB_OPENSSL,
+                  'pkeyutl',
+                  '-sign',
+                  '-inkey',
+                  self.key_path,
+                  '-in',
+                  signing_file.name,
+                  '-pkeyopt',
+                  'deterministic:1',
+              ],
+              stdin=subprocess.PIPE,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+          )
+          (pout, perr) = p.communicate()
+          retcode = p.wait()
+          if retcode != 0:
+            raise AvbError('Error signing with ML-DSA key: {}'.format(perr))
+          signature = pout
+    if len(signature) != algorithm.signature_num_bytes:
+      raise AvbError('Error signing: Invalid length of signature')
+    return signature
+
+  def verify(self, algorithm_name, signature_to_verify, data):
+    # Checks requested algorithm for validity.
+    algorithm = ALGORITHMS.get(algorithm_name)
+    if not algorithm:
+      raise AvbError('Algorithm with name {} is not supported.'
+                     .format(algorithm_name))
+
+    if len(self.pub) != algorithm.public_key_num_bytes - 4:
+      raise AvbError('Key size of key ({} bytes) does not match key size '
+                     '({} bytes) of given algorithm {}.'
+                     .format(len(self.pub),
+                             algorithm.public_key_num_bytes - 4,
+                             algorithm_name))
+
+    # Verifies the signature.
+    with tempfile.NamedTemporaryFile() as sig_tmpfile:
+      sig_tmpfile.write(signature_to_verify)
+      sig_tmpfile.flush()
+
+      with tempfile.NamedTemporaryFile() as data_tmpfile:
+        data_tmpfile.write(data)
+        data_tmpfile.flush()
+
+        p = subprocess.Popen(
+            [AVB_OPENSSL, 'pkeyutl', '-verify', '-pubin', '-inkey', self.key_path,
+            '-sigfile', sig_tmpfile.name, '-in', data_tmpfile.name],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        (pout, perr) = p.communicate()
+        retcode = p.wait()
+        if retcode != 0:
+          return False
+    return True
+
+def load_public_key(key_path):
+  """Loads and parses an key from either a private or public key file.
+
+  Arguments:
+    key_path: The path to a key file.
+
+  Returns:
+    A public key object.
+
+  Raises:
+    Exception: If the key could not be loaded from the file.
+  """
+
+  # Attempt 1: Check if it's an RSA key (private key format)
+  args = [AVB_OPENSSL, 'rsa', '-in', key_path, '-noout']
+  p1 = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  p1.communicate()
+  if p1.wait() == 0:
+      return RSAPublicKey.load(key_path)
+
+  # Attempt 2: Check if it's an RSA key (public key format)
+  args.append('-pubin')
+  p2 = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  p2.communicate()
+  if p2.wait() == 0:
+      return RSAPublicKey.load(key_path)
+
+  # If both RSA attempts fail, assume it's ML-DSA
+  return MLDSAPublicKey.load(key_path)
+
+def decode_public_key(alg_name, pubkey_blob):
+  """Decodes a public key from an in-memory blob.
+
+  Arguments:
+    alg_name: The algorithm name of the public key in the blob.
+    pubkey_blob: The encoded public key blob.
+
+  Returns:
+    A public key object.
+
+  Raises:
+    Exception: If the key could not be decoded from the blob.
+  """
+  if "RSA" in alg_name:
+    return RSAPublicKey.decode(pubkey_blob)
+  else:
+    return MLDSAPublicKey.decode(alg_name, pubkey_blob)
 
 def lookup_algorithm_by_type(alg_type):
   """Looks up algorithm by type.
@@ -664,15 +998,17 @@ def verify_vbmeta_signature(vbmeta_header, vbmeta_blob):
   # steps as performed in the avb_vbmeta_image_verify() function in
   # libavb/avb_vbmeta_image.c.
 
-  ha = hashlib.new(alg.hash_name)
-  ha.update(header_blob)
-  ha.update(aux_blob)
-  computed_digest = ha.digest()
+  computed_digest = b''
+  if alg.hash_name:
+    ha = hashlib.new(alg.hash_name)
+    ha.update(header_blob)
+    ha.update(aux_blob)
+    computed_digest = ha.digest()
 
   if computed_digest != digest_blob:
     return False
 
-  with RSAPublicKey.decode(pubkey_blob) as pubkey:
+  with decode_public_key(alg_name, pubkey_blob) as pubkey:
     return pubkey.verify(
         alg_name,
         sig_blob,
@@ -2538,7 +2874,7 @@ class Avb(object):
       print_certificate(psk)
 
   def verify_image(self, image_filename, key_path, expected_chain_partitions,
-                   follow_chain_partitions, accept_zeroed_hashtree):
+                   follow_chain_partitions, accept_zeroed_hashtree, expected_key = None):
     """Implements the 'verify_image' command.
 
     Arguments:
@@ -2551,6 +2887,8 @@ class Avb(object):
           the --expected_chain_partition option
       accept_zeroed_hashtree: If True, don't fail if hashtree or FEC data is
           zeroed out.
+      expected_key: Key specified in chained descriptor, if not None will check
+        that embedded public key matches this key blob
 
     Raises:
       AvbError: If verification of the image fails.
@@ -2576,7 +2914,7 @@ class Avb(object):
     if key_path:
       print('Verifying image {} using key at {}'.format(image_filename,
                                                         key_path))
-      with RSAPublicKey.load(key_path) as key:
+      with load_public_key(key_path) as key:
         key_blob = key.encode()
     else:
       print('Verifying image {} using embedded public key'.format(
@@ -2598,15 +2936,19 @@ class Avb(object):
       raise AvbError('Signature check failed for {} vbmeta struct {}'
                      .format(alg_name, image_filename))
 
-    if key_blob:
-      # The embedded public key is in the auxiliary block at an offset.
-      key_offset = AvbVBMetaHeader.SIZE
-      key_offset += header.authentication_data_block_size
-      key_offset += header.public_key_offset
-      key_blob_in_vbmeta = vbmeta_blob[key_offset:key_offset
+    # The embedded public key is in the auxiliary block at an offset.
+    key_offset = AvbVBMetaHeader.SIZE
+    key_offset += header.authentication_data_block_size
+    key_offset += header.public_key_offset
+    key_blob_in_vbmeta = vbmeta_blob[key_offset:key_offset
                                        + header.public_key_size]
+    if key_blob:
       if key_blob != key_blob_in_vbmeta:
         raise AvbError('Embedded public key does not match given key.')
+
+    if expected_key:
+      if expected_key != key_blob_in_vbmeta:
+        raise AvbError('Embedded public key in {} does not match key in chained descriptor \'{}\' vs \'{}\' '.format(image_filename, hashlib.sha1(expected_key).hexdigest(), hashlib.sha1(key_blob_in_vbmeta).hexdigest()))
 
     if footer:
       print('vbmeta: Successfully verified footer and {} vbmeta struct in {}'
@@ -2637,7 +2979,7 @@ class Avb(object):
         chained_image_filename = os.path.join(image_dir,
                                               desc.partition_name + image_ext)
         self.verify_image(chained_image_filename, key_path, None, False,
-                          accept_zeroed_hashtree)
+                          accept_zeroed_hashtree, desc.public_key)
 
   def print_partition_digests(self, image_filename, output, as_json):
     """Implements the 'print_partition_digests' command.
@@ -3233,11 +3575,11 @@ class Avb(object):
       if not key_path:
         raise AvbError('Key is required for algorithm {}'.format(
             algorithm_name))
-      with RSAPublicKey.load(key_path) as key:
+      with load_public_key(key_path) as key:
         encoded_key = key.encode()
       if len(encoded_key) != alg.public_key_num_bytes:
-        raise AvbError('Key is wrong size for algorithm {}'.format(
-            algorithm_name))
+        raise AvbError('Key is wrong size for algorithm {} {} {}'.format(
+            len(encoded_key), alg.public_key_num_bytes, algorithm_name))
 
     # Override release string, if requested.
     if isinstance(release_string, str):
@@ -3289,14 +3631,15 @@ class Avb(object):
     binary_hash = b''
     binary_signature = b''
     if algorithm_name != 'NONE':
-      ha = hashlib.new(alg.hash_name)
-      ha.update(header_data_blob)
-      ha.update(aux_data_blob)
-      binary_hash = ha.digest()
+      if alg.hash_name:
+        ha = hashlib.new(alg.hash_name)
+        ha.update(header_data_blob)
+        ha.update(aux_data_blob)
+        binary_hash = ha.digest()
 
       # Calculate the signature.
       data_to_sign = header_data_blob + bytes(aux_data_blob)
-      with RSAPublicKey.load(key_path) as key:
+      with load_public_key(key_path) as key:
         binary_signature = key.sign(
             algorithm_name,
             data_to_sign,
@@ -3317,27 +3660,27 @@ class Avb(object):
     """Implements the 'extract_public_key' command.
 
     Arguments:
-      key_path: The path to a RSA private key file.
+      key_path: The path to a private key file.
       output: The file to write to.
 
     Raises:
       AvbError: If the public key could not be extracted.
     """
-    with RSAPublicKey.load(key_path) as key:
+    with load_public_key(key_path) as key:
       output.write(key.encode())
 
   def extract_public_key_digest(self, key_path, output):
     """Implements the 'extract_public_key_digest' command.
 
     Arguments:
-      key_path: The path to a RSA private key file.
+      key_path: The path to a private key file.
       output: The file to write to.
 
     Raises:
       AvbError: If the public key could not be extracted.
     """
     hasher = hashlib.sha256()
-    with RSAPublicKey.load(key_path) as key:
+    with load_public_key(key_path) as key:
       hasher.update(key.encode())
     output.write(hasher.hexdigest())
 
@@ -3493,6 +3836,8 @@ class Avb(object):
       required_libavb_version_minor = 2
     if chain_partitions_do_not_use_ab:
       required_libavb_version_minor = 3
+    if algorithm_name == 'MLDSA65' or algorithm_name == 'MLDSA87':
+      required_libavb_version_minor = 4
 
     # If we're asked to calculate minimum required libavb version, we're done.
     if print_required_libavb_version:
@@ -3721,6 +4066,8 @@ class Avb(object):
       required_libavb_version_minor = 2
     if chain_partitions_do_not_use_ab:
       required_libavb_version_minor = 3
+    if algorithm_name == 'MLDSA65' or algorithm_name == 'MLDSA87':
+      required_libavb_version_minor = 4
 
     # If we're asked to calculate minimum required libavb version, we're done.
     if print_required_libavb_version:
@@ -3964,7 +4311,7 @@ class Avb(object):
     """
     signed_data = bytearray()
     signed_data.extend(struct.pack('<I', 1))  # Format Version
-    with RSAPublicKey.load(subject_key_path) as subject_key:
+    with load_public_key(subject_key_path) as subject_key:
       signed_data.extend(subject_key.encode())
     hasher = hashlib.sha256()
     hasher.update(subject)
@@ -3978,7 +4325,7 @@ class Avb(object):
     signature = b''
     if authority_key_path:
       algorithm_name = 'SHA512_RSA4096'
-      with RSAPublicKey.load(authority_key_path) as authority_key:
+      with load_public_key(authority_key_path) as authority_key:
         signature = authority_key.sign(algorithm_name, signed_data,
                                        signing_helper,
                                        signing_helper_with_files)
@@ -4006,7 +4353,7 @@ class Avb(object):
     if len(product_id) != EXPECTED_PRODUCT_ID_SIZE:
       raise AvbError('Invalid Product ID length.')
     output.write(struct.pack('<I', 1))  # Format Version
-    with RSAPublicKey.load(root_authority_key_path) as root_authority_key:
+    with load_public_key(root_authority_key_path) as root_authority_key:
       output.write(root_authority_key.encode())
     output.write(product_id)
 
@@ -4085,7 +4432,7 @@ class Avb(object):
     output.write(unlock_key_certificate)
     if challenge_path and unlock_key_path:
       algorithm_name = 'SHA512_RSA4096'
-      with RSAPublicKey.load(unlock_key_path) as unlock_key:
+      with load_public_key(unlock_key_path) as unlock_key:
         signature = unlock_key.sign(algorithm_name, challenge, signing_helper,
                                 signing_helper_with_files)
       output.write(signature)
@@ -4290,10 +4637,12 @@ class Avb(object):
                              signing_helper, signing_helper_with_files)
 
     new_alg = ALGORITHMS[algorithm_name]
-    hasher = hashlib.new(new_alg.hash_name)
-    hasher.update(header_data_blob)
-    hasher.update(aux_blob)
-    binary_hash = hasher.digest()
+    binary_hash = b''
+    if new_alg.hash_name:
+      hasher = hashlib.new(new_alg.hash_name)
+      hasher.update(header_data_blob)
+      hasher.update(aux_blob)
+      binary_hash = hasher.digest()
 
     auth_data_blob = bytearray()
     auth_data_blob.extend(binary_hash)
@@ -4380,7 +4729,8 @@ class Avb(object):
     return new_header
 
   def resign_image(self, image_filename, key_path, algorithm_name,
-                   signing_helper, signing_helper_with_files, auto_resize):
+                   signing_helper, signing_helper_with_files, auto_resize,
+                   rollback_index):
     """Resigns an image with a new key and algorithm.
 
     This method handles both images with a VBMeta footer and standalone
@@ -4399,6 +4749,7 @@ class Avb(object):
           that uses files for communication.
       auto_resize: If True, allows the image to be resized if the new key
           requires more space than is available.
+      rollback_index: If not None, the rollback index to use in the new header.
 
     Raises:
       AvbError: If the original signature cannot be verified, if resizing is
@@ -4413,7 +4764,7 @@ class Avb(object):
       raise AvbError('VBMeta signature verification failed. Refusing to '
                      'resign image.')
 
-    with RSAPublicKey.load(key_path) as new_key:
+    with load_public_key(key_path) as new_key:
       new_alg = ALGORITHMS[algorithm_name]
 
       aux_blob = self._extract_aux_blob(header, vbmeta_blob)
@@ -4422,6 +4773,8 @@ class Avb(object):
 
       new_header = self._prepare_resigned_header(header, new_alg, new_pk_size,
                                                 len(new_aux_blob))
+      if rollback_index is not None:
+        new_header.rollback_index = rollback_index
 
       new_auth_blob = self._create_new_auth_blob(
           new_header, new_aux_blob, new_key, algorithm_name, signing_helper,
@@ -4764,6 +5117,10 @@ class AvbTool(object):
     sub_parser = subparsers.add_parser('version',
                                        help='Prints version of avbtool.')
     sub_parser.set_defaults(func=self.version)
+
+    sub_parser = subparsers.add_parser('check_mldsa_support',
+                                       help='Checks if ML-DSA is supported.')
+    sub_parser.set_defaults(func=self.check_mldsa_support)
 
     sub_parser = subparsers.add_parser('extract_public_key',
                                        help='Extract public key.')
@@ -5260,6 +5617,10 @@ class AvbTool(object):
         '--auto_resize',
         help='Automatically resize the image if the new key is larger.',
         action='store_true')
+    sub_parser.add_argument('--rollback_index',
+                            help='Rollback Index',
+                            type=parse_number,
+                            default=None)
 
     sub_parser.set_defaults(func=self.resign_image)
 
@@ -5279,6 +5640,14 @@ class AvbTool(object):
   def version(self, _):
     """Implements the 'version' sub-command."""
     print(get_release_string())
+
+  def check_mldsa_support(self, _):
+    """Implements the 'check_mldsa_support' sub-command."""
+    if not MLDSAPublicKey.is_supported():
+      print('ML-DSA is NOT supported.')
+      sys.exit(1)
+    print('ML-DSA is supported.')
+    sys.exit(0)
 
   def generate_test_image(self, args):
     """Implements the 'generate_test_image' sub-command."""
@@ -5501,7 +5870,8 @@ Please use '--hash_algorithm sha256'.
     """Implements the 'resign_image' sub-command."""
     self.avb.resign_image(args.image, args.key, args.algorithm,
                           args.signing_helper,
-                          args.signing_helper_with_files, args.auto_resize)
+                          args.signing_helper_with_files, args.auto_resize,
+                          args.rollback_index)
 
 
 if __name__ == '__main__':

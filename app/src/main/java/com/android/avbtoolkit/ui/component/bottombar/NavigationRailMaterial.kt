@@ -9,10 +9,14 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
@@ -30,8 +34,10 @@ fun NavigationRailMaterial(
     val mainPagerState = LocalMainPagerState.current
 
     val items = listOf(
-        Triple(R.string.home, Icons.Filled.Home, Icons.Outlined.Home),
-        Triple(R.string.settings, Icons.Filled.Settings, Icons.Outlined.Settings)
+        Triple(R.string.tab_image, Icons.Filled.Memory, Icons.Outlined.Memory),
+        Triple(R.string.tab_vbmeta, Icons.Filled.Shield, Icons.Outlined.Shield),
+        Triple(R.string.tab_others, Icons.Filled.Extension, Icons.Outlined.Extension),
+        Triple(R.string.tab_settings, Icons.Filled.Settings, Icons.Outlined.Settings),
     )
 
     NavigationRail(

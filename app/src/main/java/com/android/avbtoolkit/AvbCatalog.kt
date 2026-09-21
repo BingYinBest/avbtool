@@ -336,6 +336,7 @@ object AvbCatalog {
                     AvbArg("--algorithm", AvbArgType.ALGO,
                         choices = SIGNING_ALGORITHMS, required = true),
                     AvbArg("--auto_resize", AvbArgType.BOOL, boolean = true),
+                    AvbArg("--rollback_index", AvbArgType.UINT),
                 ),
             ),
 
@@ -344,6 +345,13 @@ object AvbCatalog {
                 "version",
                 R.string.command_version_title,
                 R.string.command_version_description,
+                AvbCategory.OTHER,
+                args = emptyList(),
+            ),
+            AvbCommand(
+                "check_mldsa_support",
+                R.string.command_check_mldsa_support_title,
+                R.string.command_check_mldsa_support_description,
                 AvbCategory.OTHER,
                 args = emptyList(),
             ),
@@ -439,5 +447,7 @@ object AvbCatalog {
         "SHA256_ECDSA_P384",
         "SHA512_ECDSA_P256",
         "SHA512_ECDSA_P384",
+        "MLDSA65",
+        "MLDSA87",
     )
 }
