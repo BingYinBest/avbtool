@@ -73,7 +73,9 @@ import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
  * One of the three command list tabs (Image / vbmeta / Others).
@@ -127,7 +129,9 @@ private fun CommandListPagerMiuix(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .overScrollVertical(),
+                    .scrollEndHaptic()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = innerPadding,
             ) {
                 items(commands, key = { it.id }) { command ->

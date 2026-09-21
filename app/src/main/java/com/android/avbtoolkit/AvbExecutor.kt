@@ -49,16 +49,27 @@ object AvbExecutor {
     }
 
     /**
-     * Open a SAF content uri; returns a self-closing wrapper that frees
-     * the duplicated fd when the command finishes.
+     * Open a SAF content uri for reading (avbtool image/key inputs only
+     * need read access; opening read-write can fail on read-only
+     * providers, which previously surfaced as spurious failures).
      */
-    fun openFd(uri: Uri): Int {
+    fun openFdRead(uri: Uri): Int {
         val resolver = appContext!!.contentResolver
-        val pfd: ParcelFileDescriptor? = runCatching {
-            resolver.openFileDescriptor(uri, "rw")
-        }.getOrNull() ?: resolver.openFileDescriptor(uri, "r")
-        return pfd?.dup()?.fd ?: -1
+        val pfd = resolver.openFileDescriptor(uri, "r")
+            ?: throw IllegalStateException("cannot open $uri for reading")
+        return pfd.dup().fd
     }
+
+    /** Open a SAF content uri for reading or writing (output files). */
+    fun openFdWrite(uri: Uri): Int {
+        val resolver = appContext!!.contentResolver
+        val pfd = resolver.openFileDescriptor(uri, "rw")
+            ?: throw IllegalStateException("cannot open $uri for writing")
+        return pfd.dup().fd
+    }
+
+    @Deprecated("use openFdRead/openFdWrite", ReplaceWith("openFdRead(uri)"))
+    fun openFd(uri: Uri): Int = openFdRead(uri)
 
     fun releaseFd(fd: Int) {
         if (fd >= 0) {
@@ -73,7 +84,7 @@ object AvbExecutor {
 
     /** A SAF fd kept open until [close] is called. */
     class AcquiredFd(uri: Uri) : AutoCloseable {
-        val fd: Int = openFd(uri)
+        val fd: Int = openFdRead(uri)
         val pseudoPath: String = "/saf/fd/$fd"
         override fun close() = releaseFd(fd)
     }

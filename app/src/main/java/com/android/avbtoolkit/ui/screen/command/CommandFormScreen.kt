@@ -55,7 +55,9 @@ import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
  * Miuix-style form for a single avbtool command. Arguments are grouped
@@ -102,6 +104,8 @@ fun CommandScreen(
         fdToPathCache.clear()
     }
 
+    // 输出类文件参数：需要 rw 打开
+    val outKeys = setOf("--output", "--output_vbmeta_image", "--vbmeta_image", "--pkmd", "--output_pubkey", "--misc_image")
     fun run() {
         AvbExecutor.ensureStarted(context)
         running = true
@@ -119,7 +123,11 @@ fun CommandScreen(
                         else -> if (raw.isNotBlank()) {
                             argv.add(arg.key)
                             if (arg.type == AvbArgType.FILE) {
-                                val fd = AvbExecutor.openFd(Uri.parse(raw))
+                                val fd = if (arg.key in outKeys) {
+                                    AvbExecutor.openFdWrite(Uri.parse(raw))
+                                } else {
+                                    AvbExecutor.openFdRead(Uri.parse(raw))
+                                }
                                 fdToPathCache[arg.key] = fd
                                 argv.add("/saf/fd/$fd")
                             } else {
@@ -140,10 +148,13 @@ fun CommandScreen(
     }
 
     CommandScaffold(command, onBack, modifier) {
+        val scrollBehavior = MiuixScrollBehavior()
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .overScrollVertical()
+                .scrollEndHaptic()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
